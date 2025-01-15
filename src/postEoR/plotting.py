@@ -70,3 +70,7 @@ def plot_mfs(counts, bins, los_dist, box_len, z, color):
                   cosmo_params={"Om0":omega_m}, 
                   hmf_model="Watson") 
     plt.plot(mf1.m * little_h,mf1.dndm * mf1.m, label="z = " + str(z), linestyle="--", color=str(color))
+
+
+def plot_ps(ps, k, z, color, linestyle):
+    
