@@ -1,3 +1,5 @@
+""" Constant values used in the rest of the code. """
+
 H_0 = 68.73
 little_h = H_0 / 100
 omega_b = 0.046

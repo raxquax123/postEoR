@@ -1,3 +1,5 @@
+""" Plotting functions for outputs and analysis objects. """
+
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 import numpy as np
@@ -5,7 +7,29 @@ from hmf import MassFunction
 from .constants import *
 
 
-def plot_lightcone(lightcone, lightcone_item, label="Brightness temperature, mK"): # processed lightcone plotting
+def plot_lightcone(
+    lightcone, 
+    lightcone_item, 
+    save_loc,
+    label="Brightness temperature, mK",
+    title=" ",
+):
+    """
+    Plot and save the redshift evolution of a given quantity of the lightcone (e.g. brightness temperature, density).
+
+    Parameters
+    ----------
+    lightcone : Lightconer class
+        The lightcone class object output by 21cmFAST.
+    lightcone_item : NumPy array
+        Contains the 3D distribution of the quantity to be plot (output by the functions in generation.py).
+    save_loc : str
+        The path and filename for the plot to be saved to.
+    label : str (optional)
+        The label to be put on the colorbar on the plot (defaults to brightness temperature in mK if no input given).
+    title : str (optional)
+        The title of the plot.
+    """
     fig, ax = plt.subplots(1,1, constrained_layout=True)
 
     z_axis = "x"
@@ -23,19 +47,46 @@ def plot_lightcone(lightcone, lightcone_item, label="Brightness temperature, mK"
 
     plot = ax.imshow(lightcone_item[:, 10, :], extent=extent)
     cbar = fig.colorbar(plot, ax=ax)
-    cbar.set_label(label, rotation=270, labelpad = 12)
+    cbar.set_label(str(label), rotation=270, labelpad = 12)
 
     fig.gca().xaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
 
     labels = [item.get_text() for item in ax.get_xticklabels()]
     ax.set_xticklabels([str(round(float(label), 1)) for label in labels if label != ''])
-
     ax.set_xlabel("Redshift")
     ax.set_ylabel("y (Mpc)")
+    fig.suptitle(title)
+
+    plt.savefig(str(save_loc))
 
 
 
-def plot_colormaps(BT, dens, z, HII_dim, box_len): # producing colormaps
+def plot_colormaps(
+    BT, 
+    dens, 
+    z, 
+    HII_dim, 
+    box_len,
+    save_loc,
+):
+    """
+    Plot and save colormaps of a slice of the field, for the brightness temperature and overdensity.
+
+    Parameters
+    ----------
+    BT : NumPy array
+        The brightness temperature field.
+    dens : NumPy array
+        The overdensity field.
+    z : float
+        The redshift at which the fields were evaluated.
+    HII_dim : int
+        The number of cells in each of the spatial dimensions of the box / cone.
+    box_len : float
+        The physical length of each of the spatial dimensions of the box / cone, in Mpc. 
+    save_loc : str
+        The path and filename for the plot to be saved to.
+    """
     plt.rcParams['figure.figsize'] = [13, 6]
     fig, (ax1, ax3) = plt.subplots(1,2)
 
@@ -58,19 +109,95 @@ def plot_colormaps(BT, dens, z, HII_dim, box_len): # producing colormaps
     cbar3.formatter.set_powerlimits((0, 0))
 
     fig.suptitle("HII_dim " + str(HII_dim) + ", box_len " + str(box_len) + ",  z = " + str(z))
-
     fig.tight_layout()
 
-    plt.show()
+    plt.savefig(str(save_loc))
 
 
-def plot_mfs(counts, bins, los_dist, box_len, z, color):
-    plt.hist(bins[:-1], bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*box_len**2*los_dist)), histtype='step', label='z = ' + str(z), color=str(color))
+def plot_mfs(counts, 
+    bins, 
+    los_dist, 
+    box_len, 
+    z, 
+    color, 
+    save_loc,
+    title=" ",
+):
+    """
+    Plot and save the mass functions output by the get_hmf, get_himf functions.
+
+    Parameters
+    ----------
+    counts : NumPy array
+        The number of objects falling in each halo mass bin.
+    bins : NumPy array
+        The mass bins used to create the HMF.
+    los_dist : float
+        The physical distance corresponding to the redshift interval the lightcone is generated over.
+    box_len : float
+        The physical length of the spatial dimensions of the box / lightcone.
+    z : float
+        The redshift at which the mass function was evaluated.
+    color : str
+        The desired color of the plot.
+    save_loc : str
+        The path and filename for the plot to be saved to.
+    title : str (optional)
+        The title of the plot.
+    """
+    bins_plot = (bins[1:] + bins[:-1]) / 2
+    plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*box_len**2*los_dist)), histtype='step', label='z = ' + str(z), color=str(color))
     mf1 = MassFunction(z = z,
                   cosmo_params={"Om0":omega_m}, 
                   hmf_model="Watson") 
-    plt.plot(mf1.m * little_h,mf1.dndm * mf1.m, label="z = " + str(z), linestyle="--", color=str(color))
-
-
-def plot_ps(ps, k, z, color, linestyle):
     
+    plt.plot(mf1.m * little_h,mf1.dndm * mf1.m, label="z = " + str(z), linestyle="--", color=str(color))
+    plt.title(title)
+
+    plt.savefig(str(save_loc))
+
+
+def plot_ps(ps, 
+    k, 
+    z, 
+    color, 
+    linestyle, 
+    ax, 
+    label, 
+    save_loc, 
+    title=" ",
+):
+    """
+    Plot and save power spectra.
+
+    Parameters
+    ----------
+    ps : NumPy array
+        The power spectrum.
+    k : NumPy array
+        The k values corresponding to the power spectrum
+    z : float
+        The redshift at which the power spectrum was evaluated.
+    color : str
+        The desired color of the plot.
+    linestyle : str
+        The desired linestyle of the plot.
+    ax : Axes object
+        The axis on which to plot the power spectra.
+    label : str
+        The label of the item being plotted
+    save_loc : str
+        The path and filename for the plot to be saved to.
+    title : str (optional)
+        The title of the plot.
+    """
+    ax.plot(k, ps, color=str(color), label="z = " + str(z) + ", " + str(label), linestyle=str(linestyle))
+
+    ax.set_yscale("log")
+    ax.set_xscale("log")
+    ax.set_ylabel("P(k), (mK)$^2$)")
+    ax.set_xlabel("k, (Mpc)$^{-1}$)")
+    ax.legend()
+    ax.set_title(title)
+
+    plt.savefig(str(save_loc))
