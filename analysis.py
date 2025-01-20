@@ -5,7 +5,7 @@ import numpy as np
 from scipy.integrate import quad
 from .constants import *
 import py21cmfast as p21c
-import generation
+import tools
 
 def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=True): 
     """
@@ -33,6 +33,8 @@ def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=T
     error1 : NumPy array
         The error in each bin of the power spectrum.
     """
+
+    
     n = np.size(x)
     dims = np.shape(x)
 
@@ -73,7 +75,7 @@ def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=T
     return new_k, plot1, error1
 
 
-def get_dimless_PS(x, HII_dim, box_len, kbins=np.asarray([np.nan, np.nan]), remove_nan=True): 
+def get_dimless_PS(x, box_len, HII_dim:int, kbins=np.asarray([np.nan, np.nan]), remove_nan=True): 
     """
     Calculates the dimensionless power spectrum for the input field x.
 
@@ -212,9 +214,9 @@ def gen_hmf(z, HII_dim, box_len, set_bins=True):
     )
     dens_ltcone = getattr(lightcone, "density") # getting density for post-processing
     
-    halos_ltcone = generation.find_halos(dens_ltcone, overdens_cap=1.686) # find the halos on the lightcone. 
-    bins1 = np.geomspace(1e+10, 1e+13, 10)
+    halos_ltcone = tools.find_halos(dens_ltcone, overdens_cap=1.686) # find the halos on the lightcone. 
     if set_bins:
+        bins1 = np.geomspace(1e+10, 1e+13, 10)
         counts, bins = np.histogram(halos_ltcone, bins1)
     else:
         counts, bins = np.histogram(halos_ltcone)
@@ -223,10 +225,12 @@ def gen_hmf(z, HII_dim, box_len, set_bins=True):
     return bins, counts, los_dist
 
 
-def gen_himf(z, HII_dim, box_len, bins):
+def gen_himf(z, HII_dim, box_len, set_bins=True):
     """
     Generates a HI mass function at a given redshift. Used for testing of the halo finder and HI-halo mass relation.
 
+    Parameters
+    ----------
     z : float
         The redshift at which to calculate the HIMF.
     HII_dim : int
@@ -269,11 +273,14 @@ def gen_himf(z, HII_dim, box_len, bins):
     )
     dens_ltcone = getattr(lightcone, "density") # getting density for post-processing
 
-    halos_ltcone = generation.find_halos(dens_ltcone, overdens_cap=1.686) # find the halos on the lightcone. 
+    halos_ltcone = tools.find_halos(dens_ltcone, overdens_cap=1.686) # find the halos on the lightcone. 
     mean_z = (z_max+z_min) / 2
-    hi_ltcone = generation.hi_from_halos_2(halos_ltcone, mean_z)
-    bins = np.geomspace(1e+10, 1e+12, 10)
-    counts, bins = np.histogram(hi_ltcone)
+    hi_ltcone = tools.hi_from_halos_2(halos_ltcone, mean_z)
+    if set_bins:
+        bins1 = np.geomspace(1e+10, 1e+13, 10)
+        counts, bins = np.histogram(hi_ltcone, bins1)
+    else:
+        counts, bins = np.histogram(hi_ltcone)
     los_dist = get_distance(z_max, z_min)
 
     return bins, counts, los_dist

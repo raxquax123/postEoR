@@ -6,6 +6,7 @@ import os
 
 from postEoR.constants import *
 import postEoR.tools as tools
+from objects import Ltcone, Box
 
 p21c.global_params.RecombPhotonCons = 1
 p21c.global_params.PhotonConsEndCalibz = 2.5
@@ -17,7 +18,11 @@ if not os.path.exists('_cache'):
     os.mkdir('_cache')
 p21c.config['direc'] = '_cache'
 
-def generate_box(z, HII_dim=256, box_len=64): # generates a coeval box at specified redshift using base functionality of 21cmFAST and post-processing functions above
+def generate_box(
+    z : float, 
+    HII_dim=256, 
+    box_len=64,
+) -> Box:
     """
     Generates a coeval box at specified redshift using the base functionality of 21cmFAST and post-processing functions in tools.py.
 
@@ -40,7 +45,6 @@ def generate_box(z, HII_dim=256, box_len=64): # generates a coeval box at specif
         The halo field of the coeval box, in solar masses.
 
     Examples
-    
     --------
 
     """
@@ -64,12 +68,18 @@ def generate_box(z, HII_dim=256, box_len=64): # generates a coeval box at specif
     BT = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+z)**2 / ((H_0*1000/3.0857e+22)*(omega_m*(1+z)**3+omega_lambda)**0.5)) * HI_dens # bt formula from wolz et al. 2017
     BT_EoR = getattr(BT_21c, "brightness_temp") # getting bt from neutral igm (pre-reionization)
     BT_fin = np.maximum(BT, BT_EoR) # avoiding 'double-counting' of bt from post-processing and 21cmFAST
+    box = Box(z, box_len, HII_dim, dens, halos, BT_fin)
 
-    return dens, BT_fin, halos
+    return box
 
 
 
-def generate_cone(z_centr, delta_z=0.5, HII_dim=800, box_len=400): # generates a cone at specified central redshift using base functionality of 21cmFAST and post-processing functions above
+def generate_cone(
+    z_centr : float, 
+    delta_z=0.5, 
+    HII_dim=800, 
+    box_len=400,
+) -> Ltcone: 
     """
     Generates a lightcone using the base functionality of 21cmFAST and post-processing functions in tools.py.
 
@@ -86,14 +96,8 @@ def generate_cone(z_centr, delta_z=0.5, HII_dim=800, box_len=400): # generates a
 
     Returns
     -------
-    dens_ltcone : NumPy array
-        The overdensity field of the lightcone, calculated using 21cmFAST. Dimensionless.
-    BT_ltcone : NumPy array
-        The brightness temperature field of the lightcone, in mK.
-    halos_ltcone : NumPy array
-        The halo field of the lightcone, in solar masses.
-    lightcone : Lightconer object
-        The Lightconer structure from 21cmFAST, used in plotting.
+    ltcone : Ltcone object
+    Object containing the BT, overdensity, and halo fields of the lightcone, in addition to defining information.
 
     Examples
     --------
@@ -114,7 +118,6 @@ def generate_cone(z_centr, delta_z=0.5, HII_dim=800, box_len=400): # generates a
         quantities=('brightness_temp', 'density', 'velocity_z'),
         resolution=user_params.cell_size,
         get_los_velocity = True,
-        # index_offset=0,
     )
     # run lightcone using 21cmFAST functionality
     lightcone = p21c.run_lightcone(
@@ -135,4 +138,7 @@ def generate_cone(z_centr, delta_z=0.5, HII_dim=800, box_len=400): # generates a
     BT_HI_ltcone = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+redshift)**2 / ((H_0*1000/3.0857e+22)*(omega_m*(1+redshift)**3+omega_lambda)**0.5)) * HI_dens # bt formula from wolz et al. 2017
     BT_ltcone = np.maximum(BT_HI_ltcone, BT_EoR_ltcone)
 
-    return dens_ltcone, BT_ltcone, halos_ltcone, lightcone
+    # set up Ltcone object, containing the post-EoR data
+    ltcone = Ltcone(max_redshift, min_redshift, box_len, HII_dim, dens_ltcone, halos_ltcone, BT_ltcone, lightcone)
+
+    return ltcone

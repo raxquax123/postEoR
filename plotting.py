@@ -10,9 +10,9 @@ from .constants import *
 def plot_lightcone(
     lightcone, 
     lightcone_item, 
-    save_loc,
+    save_loc : str,
+    title : str,
     label="Brightness temperature, mK",
-    title=" ",
 ):
     """
     Plot and save the redshift evolution of a given quantity of the lightcone (e.g. brightness temperature, density).
@@ -52,22 +52,21 @@ def plot_lightcone(
     fig.gca().xaxis.set_major_formatter(StrMethodFormatter('{x:,.1f}'))
 
     labels = [item.get_text() for item in ax.get_xticklabels()]
-    ax.set_xticklabels([str(round(float(label), 1)) for label in labels if label != ''])
+    ax.set_xticklabels([str(round(float(x), 1)) for x in labels if label != ''])
     ax.set_xlabel("Redshift")
     ax.set_ylabel("y (Mpc)")
     fig.suptitle(title)
 
-    plt.savefig(str(save_loc))
-
+    plt.savefig(save_loc)
 
 
 def plot_colormaps(
     BT, 
     dens, 
-    z, 
-    HII_dim, 
-    box_len,
-    save_loc,
+    z : float, 
+    HII_dim : float, 
+    box_len : float,
+    save_loc : str,
 ):
     """
     Plot and save colormaps of a slice of the field, for the brightness temperature and overdensity.
@@ -116,12 +115,12 @@ def plot_colormaps(
 
 def plot_mfs(counts, 
     bins, 
-    los_dist, 
-    box_len, 
-    z, 
-    color, 
-    save_loc,
-    title=" ",
+    los_dist : float, 
+    box_len : float, 
+    z : float, 
+    save_loc : str,
+    title : str,
+    color="tab:blue",
 ):
     """
     Plot and save the mass functions output by the get_hmf, get_himf functions.
@@ -138,12 +137,12 @@ def plot_mfs(counts,
         The physical length of the spatial dimensions of the box / lightcone.
     z : float
         The redshift at which the mass function was evaluated.
-    color : str
-        The desired color of the plot.
     save_loc : str
         The path and filename for the plot to be saved to.
-    title : str (optional)
+    title : str 
         The title of the plot.
+    color : str (optional)
+        The desired color of the plot.
     """
     bins_plot = (bins[1:] + bins[:-1]) / 2
     plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*box_len**2*los_dist)), histtype='step', label='z = ' + str(z), color=str(color))
@@ -159,13 +158,13 @@ def plot_mfs(counts,
 
 def plot_ps(ps, 
     k, 
-    z, 
-    color, 
-    linestyle, 
+    z : float, 
+    linestyle : str, 
     ax, 
-    label, 
-    save_loc, 
-    title=" ",
+    label : str, 
+    save_loc : str, 
+    title : str,
+    color="tab:blue", 
 ):
     """
     Plot and save power spectra.
@@ -178,8 +177,6 @@ def plot_ps(ps,
         The k values corresponding to the power spectrum
     z : float
         The redshift at which the power spectrum was evaluated.
-    color : str
-        The desired color of the plot.
     linestyle : str
         The desired linestyle of the plot.
     ax : Axes object
@@ -188,8 +185,10 @@ def plot_ps(ps,
         The label of the item being plotted
     save_loc : str
         The path and filename for the plot to be saved to.
-    title : str (optional)
+    title : str 
         The title of the plot.
+    color : str (optional)
+        The desired color of the plot.
     """
     ax.plot(k, ps, color=str(color), label="z = " + str(z) + ", " + str(label), linestyle=str(linestyle))
 
