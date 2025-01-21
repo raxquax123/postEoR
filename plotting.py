@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 import numpy as np
 from hmf import MassFunction
-from .constants import *
+from postEoR.generation import hlittle, OMm
 
 
 def plot_lightcone(
@@ -30,6 +30,7 @@ def plot_lightcone(
     title : str (optional)
         The title of the plot.
     """
+    plt.clf() # clearing any previous plots
     fig, ax = plt.subplots(1,1, constrained_layout=True)
 
     z_axis = "x"
@@ -86,6 +87,7 @@ def plot_colormaps(
     save_loc : str
         The path and filename for the plot to be saved to.
     """
+    plt.clf() # clearing any previous plots
     plt.rcParams['figure.figsize'] = [13, 6]
     fig, (ax1, ax3) = plt.subplots(1,2)
 
@@ -144,14 +146,17 @@ def plot_mfs(counts,
     color : str (optional)
         The desired color of the plot.
     """
+    plt.clf() # clearing any previous plots
     bins_plot = (bins[1:] + bins[:-1]) / 2
     plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*box_len**2*los_dist)), histtype='step', label='z = ' + str(z), color=str(color))
     mf1 = MassFunction(z = z,
-                  cosmo_params={"Om0":omega_m}, 
+                  cosmo_params={"Om0":OMm}, 
                   hmf_model="Watson") 
     
-    plt.plot(mf1.m * little_h,mf1.dndm * mf1.m, label="z = " + str(z), linestyle="--", color=str(color))
+    plt.plot(mf1.m * hlittle,mf1.dndm * mf1.m, label="z = " + str(z), linestyle="--", color=str(color))
     plt.title(title)
+    plt.yscale("log")
+    plt.xscale("log")
 
     plt.savefig(str(save_loc))
 
@@ -190,6 +195,7 @@ def plot_ps(ps,
     color : str (optional)
         The desired color of the plot.
     """
+    plt.clf() # clearing any previous plots
     ax.plot(k, ps, color=str(color), label="z = " + str(z) + ", " + str(label), linestyle=str(linestyle))
 
     ax.set_yscale("log")

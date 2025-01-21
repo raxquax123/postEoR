@@ -1,14 +1,13 @@
 """ The classes containing the fields generated. """
 
 from scipy.integrate import quad
-from .constants import *
 import numpy as np
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from abc import ABC
-from hmf import MassFunction
-from .tools import hi_from_halos_2
+from postEoR.tools import hi_from_halos_2
+from postEoR.generation import hlittle, OMm, OMl, c
 
 class Base(ABC):
     """
@@ -32,8 +31,9 @@ class Base(ABC):
         """
         z_end = self.z_end
         z_start = self.z_start
+        H_0 = hlittle * 100
         c_km = c / 1000
-        dx = lambda z: 1 / (H_0*(omega_m*(1+z)**3+omega_lambda)**0.5)
+        dx = lambda z: 1 / (H_0*(OMm*(1+z)**3+OMl)**0.5)
         dist = quad(dx, z_end, z_start)
         dist = dist[0] * c_km
 
@@ -64,8 +64,10 @@ class Base(ABC):
         else:
             counts, bins = np.histogram(self.halo_field)
 
-        if self.hasattr("Lightconer"):
+        if hasattr(self, "Lightconer"):
             los_dist = self.get_distance(self.z_start, self.z_end) # used for plotting
+        else:
+            los_dist = self.box_len
 
         return bins, counts, los_dist
     

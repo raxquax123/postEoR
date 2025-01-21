@@ -1,18 +1,13 @@
 """ Functions to be used in generating the coeval boxes and lightcones."""
 
-import py21cmfast as p21c
 import numpy as np
-from astropy.cosmology import WMAP7
 from scipy.integrate import quad
 import scipy.ndimage as ndimage
 
-from postEoR.constants import *
-
-p21c.global_params.RecombPhotonCons = 1
-p21c.global_params.PhotonConsEndCalibz = 2.5
-p21c.FlagOptions.USE_TS_FLUCT = False
-p21c.FlagOptions.INHOMO_RECO = True
-p21c.FlagOptions.PHOTON_CONS = True
+""" Defining / importing parameters used. """
+from postEoR.generation import hlittle, OMm, OMl, OMb
+G = 6.67430e-11 # gravitational constant, in N m^2 / kg^2
+hydrogen_baryon_frac = 0.75
 
 def push_mass_to_halo(x, y):
     """
@@ -120,7 +115,7 @@ def get_delta_vir(z):
     delta_vir : float
         The mean halo overdensity within the virial radius at the input redshift. Dimensionless.
     """
-    x = omega_m * (1+z)**3 / (omega_m*(1+z)**3 + omega_lambda) - 1
+    x = OMm * (1+z)**3 / (OMm*(1+z)**3 + OMl) - 1
     delta_vir = 18*np.pi**2 + 82 * x - 39 * x**2 # mean overdensity within virial radius formula
 
     return delta_vir
@@ -142,7 +137,7 @@ def get_vc(M, z):
     vc : float
         The virial velocity of the object, in km/s.
     """
-    vc = np.array(163 *(M * little_h / 10**12)**(1/3)*(get_delta_vir(z)/200)**(1/6)*omega_m**(1/6)*(1+z)**0.5)  # virial velocity formula
+    vc = np.array(163 *(M * hlittle / 10**12)**(1/3)*(get_delta_vir(z)/200)**(1/6)*OMm**(1/6)*(1+z)**0.5)  # virial velocity formula
     vc[vc < 0.01] = 0.01 # avoid dividing by zero errors later on.
 
     return vc
@@ -222,8 +217,13 @@ def find_halos(overdensity_field, box_len, HII_dim, max_count=50, overdens_cap=1
     halo_field : NumPy array
         The distribution of halo masses across the field, in solar masses.
     """
+    H_0_std_units = (hlittle * 100 * 1000) / (3.086e22)
+    z_comov = 3
+    H = H_0_std_units * (OMm*(1+z_comov)**3 + OMl) ** 0.5
+    crit_M_dens = (3 * H ** 2) / (8 * np.pi * G) * (OMm * (1+z_comov)**3) / (OMm*(1+z_comov)**3 + OMl) # using the critical density at a set redshift as the simulation is comoving.
+
     new_overdensity_field = overdensity_field.copy()
-    mass_field = (1 + new_overdensity_field) * WMAP7.critical_density(3).value * 1000 * (box_len / HII_dim * 3.086*10**22)**3 / (1.989 * 10**30) * (1 / (1 + np.mean(overdensity_field))) # converting to solar masses (critical density at z = 3 since comoving box) CHECK
+    mass_field = (1 + new_overdensity_field) * crit_M_dens * (box_len / HII_dim * 3.086*10**22)**3 / (1.989 * 10**30) * (1 / (1 + np.mean(overdensity_field))) # converting to solar masses (critical density at z = 3 since comoving box) CHECK
 
     mass_field[overdensity_field < overdens_cap] = 0 # removing underdense regions
     halo_field = np.zeros(np.shape(overdensity_field)) # empty array to put masses into
@@ -315,14 +315,14 @@ def hi_from_halos_2(halo_field, z):
     xHI_mass : NumPy array
         The total neutral hydrogen mass associated with each of the halos in the field, in solar masses.
     """
-    f_H = omega_b * hydrogen_baryon_frac / omega_m
+    f_H = OMb * hydrogen_baryon_frac / OMm
     alpha = 0.17
     v_c0 = 10**1.57 # potentially edit limits to match observations 
     v_c1 = 10**4.39
     beta = -0.55
     v_c = get_vc(halo_field, z)
 
-    xHI_mass = alpha*f_H*halo_field**(1+beta)*(little_h / 10**11)**beta*np.exp(-(v_c0/v_c)**3)*np.exp(-(v_c/v_c1)**3)
+    xHI_mass = alpha*f_H*halo_field**(1+beta)*(hlittle / 10**11)**beta*np.exp(-(v_c0/v_c)**3)*np.exp(-(v_c/v_c1)**3)
 
     return xHI_mass
 
@@ -385,7 +385,7 @@ def get_HI_field(halo_field, z, box_len, HII_dim, no_bins=25, max_rad=1):
     final_HI_field = np.zeros(np.shape(halo_field))
 
     for i in range(no_bins):
-        spherical_profile = create_spherical_profile(M_centr[i], z, max_rad, box_len, HII_dim)
+        spherical_profile = create_spherical_profile(M_centr[i], z, box_len, HII_dim, max_rad)
         halo_pos = (binned_halos[i] > 0.01).astype(int)
         print("abt to convolve")
         final_HI_field += ndimage.convolve(halo_pos, spherical_profile)

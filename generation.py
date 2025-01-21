@@ -4,15 +4,30 @@ import py21cmfast as p21c
 import numpy as np
 import os
 
-from postEoR.constants import *
-import postEoR.tools as tools
-from objects import Ltcone, Box
-
 p21c.global_params.RecombPhotonCons = 1
 p21c.global_params.PhotonConsEndCalibz = 2.5
 p21c.FlagOptions.USE_TS_FLUCT = False
 p21c.FlagOptions.INHOMO_RECO = True
 p21c.FlagOptions.PHOTON_CONS = True
+
+""" Defining the cosmology used. Here, using Planck18. """
+OMm = 0.30964144154550644
+OMb = 0.04897468161869667
+hlittle = 67.66 / 100
+cosmo_params = p21c.CosmoParams(hlittle=hlittle, OMm=OMm, OMb=OMb)
+OMl = 1 - OMm # assuming a flat cosmology - as is done by 21cmFAST.
+
+""" Defining physical constants. """
+c = 299792458 # speed of light, in m/s
+k_B = 1.380649e-23 # Boltzmann constant, in J/K
+T_CMB = 2.7255 # CMB temperature, in K
+A_10 = 2.86888e-15 # einstein coefficient for hi spin-flip transition
+m_H = 1.6735e-27 # mass of hydrogen atom
+nu_21 = 1420.405751768 * 10**6 # frequency of hi spin-flip transition, in Hz
+h = 6.63e-34 # Planck's constant
+
+import postEoR.tools as tools
+from postEoR.objects import Ltcone, Box
 
 if not os.path.exists('_cache'):
     os.mkdir('_cache')
@@ -51,6 +66,7 @@ def generate_box(
     # 21cmFAST - generates and evolves the density field using 2LPT, and produces the bt expected from eor
     initial_conditions = p21c.initial_conditions(
         user_params = {"HII_DIM": HII_dim, "BOX_LEN": box_len, "USE_2LPT": True, "HMF": 3},
+        cosmo_params=cosmo_params,
         random_seed=1122
     )
     perturbed_field = p21c.perturb_field(
@@ -63,9 +79,10 @@ def generate_box(
     halos = tools.find_halos(dens, box_len, HII_dim) # obtain halo distribution and masses from the overdensity field by pushing overdensities to their local maxima
     HI_distr = tools.get_HI_field(halos, z, box_len, HII_dim) # obtain the neutral hydrogen distribution, given a halo field and the redshift of evaluation
 
+    H_0 = hlittle * 100
     BT_21c = p21c.brightness_temperature(ionized_box=ionized_field, perturbed_field=perturbed_field) # calculate 21cm bt from 21cmFAST - eor / neutral igm contribution
     HI_dens = HI_distr * (1.989 * 10**30) / (box_len / HII_dim * 3.086*10**22)**3 # calculate \rho_{HI} in kg/m^3
-    BT = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+z)**2 / ((H_0*1000/3.0857e+22)*(omega_m*(1+z)**3+omega_lambda)**0.5)) * HI_dens # bt formula from wolz et al. 2017
+    BT = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+z)**2 / ((H_0*1000/3.0857e+22)*(OMm*(1+z)**3+OMl)**0.5)) * HI_dens # bt formula from wolz et al. 2017
     BT_EoR = getattr(BT_21c, "brightness_temp") # getting bt from neutral igm (pre-reionization)
     BT_fin = np.maximum(BT, BT_EoR) # avoiding 'double-counting' of bt from post-processing and 21cmFAST
     box = Box(z, box_len, HII_dim, dens, halos, BT_fin)
@@ -125,6 +142,7 @@ def generate_cone(
         global_quantities=("brightness_temp", "density", 'xH_box'),
         direc='_cache',
         user_params=user_params,
+        cosmo_params=cosmo_params,
         random_seed=1122
     )
     BT_EoR_ltcone = getattr(lightcone, "brightness_temp") # getting the bt from the pre-reionization neutral igm
@@ -134,8 +152,9 @@ def generate_cone(
     redshift = (min_redshift+max_redshift) / 2 # taking the mean redshift of the lightcone to use in evaluating the BT
     HI_ltcone = tools.get_HI_field(halos_ltcone, redshift, box_len, HII_dim, no_bins=25, max_rad=5) # find the hi field on the lightcone
 
+    H_0 = hlittle * 100
     HI_dens = HI_ltcone * (1.989 * 10**30) / (box_len / HII_dim * 3.086*10**22)**3 # calculate \rho_{HI} in kg/m^3
-    BT_HI_ltcone = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+redshift)**2 / ((H_0*1000/3.0857e+22)*(omega_m*(1+redshift)**3+omega_lambda)**0.5)) * HI_dens # bt formula from wolz et al. 2017
+    BT_HI_ltcone = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+redshift)**2 / ((H_0*1000/3.0857e+22)*(OMm*(1+redshift)**3+OMl)**0.5)) * HI_dens # bt formula from wolz et al. 2017
     BT_ltcone = np.maximum(BT_HI_ltcone, BT_EoR_ltcone)
 
     # set up Ltcone object, containing the post-EoR data

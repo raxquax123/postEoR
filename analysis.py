@@ -1,11 +1,11 @@
-""" Analysis functions for the fields generated. """
+""" Analysis functions. Not needed if analysing quantities produced by postEoR, as the classes contain the required analysis functions, but here for analysis of other arrays if needed. """
 
 import scipy.stats as stats
 import numpy as np
 from scipy.integrate import quad
-from .constants import *
 import py21cmfast as p21c
-import tools
+import postEoR.tools as tools
+from postEoR.generation import hlittle, OMm, OMl
 
 def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=True): 
     """
@@ -33,8 +33,6 @@ def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=T
     error1 : NumPy array
         The error in each bin of the power spectrum.
     """
-
-    
     n = np.size(x)
     dims = np.shape(x)
 
@@ -158,8 +156,9 @@ def get_distance(z_start, z_end=0):
     dist : float
         The distance corresponding to the input redshift interval, in Mpc.
     """
-    c_km = c / 1000
-    dx = lambda z: 1 / (H_0*(omega_m*(1+z)**3+omega_lambda)**0.5)
+    c_km = 299792458 / 1000
+    H_0 = hlittle * 100
+    dx = lambda z: 1 / (H_0*(OMm*(1+z)**3+OMl)**0.5)
     dist = quad(dx, z_end, z_start)
     dist = dist[0] * c_km
 
