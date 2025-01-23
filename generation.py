@@ -14,7 +14,7 @@ p21c.FlagOptions.PHOTON_CONS = True
 OMm = 0.30964144154550644
 OMb = 0.04897468161869667
 hlittle = 67.66 / 100
-cosmo_params = p21c.CosmoParams(hlittle=hlittle, OMm=OMm, OMb=OMb)
+cosmo_params = p21c.CosmoParams(hlittle=hlittle, OMm=OMm, OMb=OMb) # adding cosmology used to 21cmFAST.
 OMl = 1 - OMm # assuming a flat cosmology - as is done by 21cmFAST.
 
 """ Defining physical constants. """
@@ -25,6 +25,8 @@ A_10 = 2.86888e-15 # einstein coefficient for hi spin-flip transition
 m_H = 1.6735e-27 # mass of hydrogen atom
 nu_21 = 1420.405751768 * 10**6 # frequency of hi spin-flip transition, in Hz
 h = 6.63e-34 # Planck's constant
+solar_mass = 1.989 * 10**30 # mass of the sun in kg
+Mpc_to_m = 3.0857e+22 # conversion from Mpc to m
 
 import postEoR.tools as tools
 from postEoR.objects import Ltcone, Box
@@ -37,6 +39,8 @@ def generate_box(
     z : float, 
     HII_dim=256, 
     box_len=64,
+    overdens_cap=1.686,
+    use_watershed=False,
 ) -> Box:
     """
     Generates a coeval box at specified redshift using the base functionality of 21cmFAST and post-processing functions in tools.py.
@@ -45,23 +49,28 @@ def generate_box(
     ----------
     z : float
         Redshift at which to produce the coeval box.
-    HII_dim : int
+    HII_dim : int (optional)
         The number of cells in each dimension of the box.
-    box_len : float
+    box_len : float (optional)
         The size of the box in Mpc.
+    overdens_cap : float (optional)
+        The minimum overdensity required for a cell to be considered part of a halo. Defaults to 1.686 (Press-Schechter critical overdensity for collapse).
+    use_watershed : bool (optional)
+        Whether to use a watershed-based method for finding the halos. Defaults to False.
 
     Returns
     -------
-    dens : NumPy array
-        The overdensity field of the coeval box, calculated using 21cmFAST. Dimensionless.
-    BT_fin : NumPy array
-        The brightness temperature field of the coeval box, in mK.
-    halos : NumPy array
-        The halo field of the coeval box, in solar masses.
-
-    Examples
-    --------
-
+    box : Box object
+        Object containing the BT, overdensity, and halo fields of the coeval box, in addition to defining information.
+    
+    Example usage
+    -------------
+    >>> from postEoR import generation as gen
+    >>> box = gen.generate_box(z=4, HII_dim=250, box_len=50, overdens_cap=0, use_watershed=True)
+    >>> print(box)
+    <postEoR.objects.Box object at 0x199b7d690>
+    >>> print(box.cell_size())
+    0.2
     """
     # 21cmFAST - generates and evolves the density field using 2LPT, and produces the bt expected from eor
     initial_conditions = p21c.initial_conditions(
@@ -75,14 +84,16 @@ def generate_box(
     )
     ionized_field = p21c.ionize_box(perturbed_field = perturbed_field) # export neutral fraction from 21cmFAST (EoR bubbles)
     dens = getattr(perturbed_field, "density") # export overdensity field for use in post-processing
-    
-    halos = tools.find_halos(dens, box_len, HII_dim) # obtain halo distribution and masses from the overdensity field by pushing overdensities to their local maxima
+    if use_watershed:
+        halos = tools.find_halos_watershed(dens, box_len, HII_dim, overdens_cap=overdens_cap)
+    else:
+        halos = tools.find_halos(dens, box_len, HII_dim, overdens_cap=overdens_cap) # obtain halo distribution and masses from the overdensity field by pushing overdensities to their local maxima
     HI_distr = tools.get_HI_field(halos, z, box_len, HII_dim) # obtain the neutral hydrogen distribution, given a halo field and the redshift of evaluation
 
     H_0 = hlittle * 100
     BT_21c = p21c.brightness_temperature(ionized_box=ionized_field, perturbed_field=perturbed_field) # calculate 21cm bt from 21cmFAST - eor / neutral igm contribution
-    HI_dens = HI_distr * (1.989 * 10**30) / (box_len / HII_dim * 3.086*10**22)**3 # calculate \rho_{HI} in kg/m^3
-    BT = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+z)**2 / ((H_0*1000/3.0857e+22)*(OMm*(1+z)**3+OMl)**0.5)) * HI_dens # bt formula from wolz et al. 2017
+    HI_dens = HI_distr * solar_mass / (box_len / HII_dim * Mpc_to_m)**3 # calculate \rho_{HI} in kg/m^3
+    BT = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+z)**2 / ((H_0*1000/Mpc_to_m)*(OMm*(1+z)**3+OMl)**0.5)) * HI_dens # bt formula from wolz et al. 2017
     BT_EoR = getattr(BT_21c, "brightness_temp") # getting bt from neutral igm (pre-reionization)
     BT_fin = np.maximum(BT, BT_EoR) # avoiding 'double-counting' of bt from post-processing and 21cmFAST
     box = Box(z, box_len, HII_dim, dens, halos, BT_fin)
@@ -94,8 +105,10 @@ def generate_box(
 def generate_cone(
     z_centr : float, 
     delta_z=0.5, 
-    HII_dim=800, 
+    HII_dim=200, 
     box_len=400,
+    overdens_cap=1.686,
+    use_watershed=False,
 ) -> Ltcone: 
     """
     Generates a lightcone using the base functionality of 21cmFAST and post-processing functions in tools.py.
@@ -107,18 +120,27 @@ def generate_cone(
     delta_z : float
         The size of the redshift range over which to evaluate the lightcone. Defaults to 0.5.
     HII_dim : int
-        The number of cells in each spatial dimension of the lightcone. Defaults to 800.
+        The number of cells in each spatial dimension of the lightcone. Defaults to 200.
     box_len : float
         The length in Mpc of each spatial dimension of the lightcone. Defaults to 400.
+    overdens_cap : float
+        The minimum overdensity required for a cell to be considered part of a halo. Defaults to 1.686 (Press-Schechter critical overdensity for collapse).
+    use_watershed : bool (optional)
+        Whether to use a watershed-based method for finding the halos. Defaults to False.
 
     Returns
     -------
     ltcone : Ltcone object
-    Object containing the BT, overdensity, and halo fields of the lightcone, in addition to defining information.
+        Object containing the BT, overdensity, and halo fields of the lightcone, in addition to defining information.
 
-    Examples
-    --------
-
+    Example usage
+    -------------
+    >>> from postEoR import generation as gen
+    >>> cone = gen.generate_cone(z_centr=4, delta_z=0.4, HII_dim=250, box_len=400, overdens_cap=0, use_watershed=True)
+    >>> print(cone)
+    <postEoR.objects.Ltcone object at 0x199b7d690>
+    >>> print(cone.cell_size())
+    1.6
     """
     # 21cmFAST - generates and evolves the density field using 2LPT, and produces the bt expected from eor
     user_params = p21c.UserParams(
@@ -148,13 +170,16 @@ def generate_cone(
     BT_EoR_ltcone = getattr(lightcone, "brightness_temp") # getting the bt from the pre-reionization neutral igm
     dens_ltcone = getattr(lightcone, "density") # getting density for post-processing
 
-    halos_ltcone = tools.find_halos(dens_ltcone, box_len, HII_dim) # find the halos on the lightcone.
+    if use_watershed:
+        halos_ltcone = tools.find_halos_watershed(dens_ltcone, box_len, HII_dim, overdens_cap=overdens_cap)
+    else:
+        halos_ltcone = tools.find_halos(dens_ltcone, box_len, HII_dim, overdens_cap=overdens_cap) # find the halos on the lightcone.
     redshift = (min_redshift+max_redshift) / 2 # taking the mean redshift of the lightcone to use in evaluating the BT
     HI_ltcone = tools.get_HI_field(halos_ltcone, redshift, box_len, HII_dim, no_bins=25, max_rad=5) # find the hi field on the lightcone
 
     H_0 = hlittle * 100
-    HI_dens = HI_ltcone * (1.989 * 10**30) / (box_len / HII_dim * 3.086*10**22)**3 # calculate \rho_{HI} in kg/m^3
-    BT_HI_ltcone = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+redshift)**2 / ((H_0*1000/3.0857e+22)*(OMm*(1+redshift)**3+OMl)**0.5)) * HI_dens # bt formula from wolz et al. 2017
+    HI_dens = HI_ltcone * solar_mass / (box_len / HII_dim * Mpc_to_m)**3 # calculate \rho_{HI} in kg/m^3
+    BT_HI_ltcone = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+redshift)**2 / ((H_0*1000/Mpc_to_m)*(OMm*(1+redshift)**3+OMl)**0.5)) * HI_dens # bt formula from wolz et al. 2017
     BT_ltcone = np.maximum(BT_HI_ltcone, BT_EoR_ltcone)
 
     # set up Ltcone object, containing the post-EoR data

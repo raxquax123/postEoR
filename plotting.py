@@ -21,7 +21,7 @@ def plot_lightcone(
     ----------
     lightcone : Lightconer class
         The lightcone class object output by 21cmFAST.
-    lightcone_item : NumPy array
+    lightcone_item : NDarray
         Contains the 3D distribution of the quantity to be plot (output by the functions in generation.py).
     save_loc : str
         The path and filename for the plot to be saved to.
@@ -74,9 +74,9 @@ def plot_colormaps(
 
     Parameters
     ----------
-    BT : NumPy array
+    BT : NDarray
         The brightness temperature field.
-    dens : NumPy array
+    dens : NDarray
         The overdensity field.
     z : float
         The redshift at which the fields were evaluated.
@@ -129,9 +129,9 @@ def plot_mfs(counts,
 
     Parameters
     ----------
-    counts : NumPy array
+    counts : NDarray
         The number of objects falling in each halo mass bin.
-    bins : NumPy array
+    bins : NDarray
         The mass bins used to create the HMF.
     los_dist : float
         The physical distance corresponding to the redshift interval the lightcone is generated over.
@@ -176,9 +176,9 @@ def plot_ps(ps,
 
     Parameters
     ----------
-    ps : NumPy array
+    ps : NDarray
         The power spectrum.
-    k : NumPy array
+    k : NDarray
         The k values corresponding to the power spectrum
     z : float
         The redshift at which the power spectrum was evaluated.
