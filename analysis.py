@@ -5,7 +5,10 @@ import numpy as np
 from scipy.integrate import quad
 import py21cmfast as p21c
 import postEoR.tools as tools
-from postEoR.generation import hlittle, OMm, OMl
+from postEoR.tools import hlittle, OMm, OMl
+from postEoR.objects import Box, Ltcone
+import matplotlib.pyplot as plt
+
 
 def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=True): 
     """
@@ -283,3 +286,72 @@ def gen_himf(z, HII_dim, box_len, set_bins=True):
     los_dist = get_distance(z_max, z_min)
 
     return bins, counts, los_dist
+
+
+def flatten(x, axis): # takes all the values along a given axis and sums them (essentially flattening along one dimension)
+    dims = np.shape(x)
+    if axis == 0:
+        flat = np.zeros([dims[1], dims[2]])
+        for i in range(dims[1]):
+            for j in range(dims[2]):
+                for k in range(dims[0]):
+                    flat[i, j] += x[k, i, j]
+    elif axis == 1:
+        flat = np.zeros([dims[0], dims[2]])
+        for i in range(dims[0]):
+            for j in range(dims[2]):
+                for k in range(dims[1]):
+                    flat[i, j] += x[i, k, j]
+    else: # assumes flattening along redshift direction, if axis not specified or invalid
+        flat = np.zeros([dims[0], dims[1]])
+        for i in range(dims[0]):
+            for j in range(dims[1]):
+                for k in range(dims[2]):
+                    flat[i, j] += x[i, j ,k]
+    return flat
+
+
+def reduce_res(reduction_factor, object: Box | Ltcone):
+    # changing resolution of brightness temperature
+    dx, dy = object.cell_size, object.cell_size 
+    y1_new, x1_new = np.mgrid[slice(dy * reduction_factor / 2, object.box_len, dy*reduction_factor), slice(dx*reduction_factor/ 2, object.box_len, dx*reduction_factor)]
+    y1p, x1p = np.mgrid[slice(dy / 2, object.box_len, dy), slice(dx / 2, object.box_len, dx)]
+
+    xbins = np.linspace(0, object.HII_dim, int(object.HII_dim / reduction_factor))
+    ybins = np.linspace(0, object.HII_dim, int(object.HII_dim / reduction_factor))
+    x1 = np.linspace(0, object.HII_dim, object.HII_dim+1)
+    y1 = np.linspace(0, object.HII_dim, object.HII_dim+1)
+    x1 = (x1[1:]+x1[:-1])/2
+    y1 = (y1[1:]+y1[:-1])/2
+
+    new_HII_dim = np.size(x1_new[0]) - 1
+
+    binned_1 = np.zeros([new_HII_dim, object.HII_dim])
+    binned_fin = np.zeros([new_HII_dim, new_HII_dim])
+
+    two_d_BT = flatten(object.BT_field[:, :, :5], 2)
+
+    for i in range(object.HII_dim):
+        ith_row = np.array(two_d_BT[:, i])
+        Abins1, _, _ = stats.binned_statistic(x1, ith_row, statistic = "mean", bins = xbins) 
+        binned_1[:, i] = Abins1
+    for i in range(new_HII_dim):
+        ith_row = np.array(binned_1[i, :])
+        Abins1, _, _ = stats.binned_statistic(y1, ith_row, statistic = "mean", bins = ybins) 
+        binned_fin[i, :] = Abins1
+
+    plt.rcParams['figure.figsize'] = [16, 5.5]
+    fig, (ax3, ax4) = plt.subplots(1, 2)
+
+    cb3 = ax3.pcolormesh(x1_new, y1_new, binned_fin, cmap = "viridis")
+    ax3.set_xlabel('$x$ (Mpc)')
+    cbar3 = fig.colorbar(cb3)
+    cbar3.set_label('Brightness temperature, mK', rotation=270, labelpad = 12)
+    cbar3.formatter.set_powerlimits((0, 0))
+    cb4 = ax4.pcolormesh(x1p, y1p, two_d_BT, cmap = "viridis")
+    ax4.set_xlabel('$x$ (Mpc)')
+    cbar4 = fig.colorbar(cb4)
+    cbar4.set_label('Brightness temperature, mK', rotation=270, labelpad = 12)
+    cbar4.formatter.set_powerlimits((0, 0))
+
+    return binned_fin

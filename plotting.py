@@ -157,6 +157,8 @@ def plot_mfs(counts,
     plt.title(title)
     plt.yscale("log")
     plt.xscale("log")
+    plt.ylabel('$\dfrac{dn}{d\log M}$ (Mpc$^{-3}$)')
+    plt.xlabel('M (M$_{\odot}$)')
 
     plt.savefig(str(save_loc))
 

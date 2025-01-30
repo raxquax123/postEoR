@@ -5,102 +5,71 @@ from scipy.integrate import quad
 import scipy.ndimage as ndimage
 from skimage.segmentation import watershed
 from scipy import ndimage as ndi
+import py21cmfast as p21c
 
 """ Defining / importing parameters used. """
-from postEoR.generation import hlittle, OMm, OMl, OMb, Mpc_to_m, solar_mass
+""" Defining the cosmology used. Here, using Planck18. """
+OMm = 0.30964144154550644
+OMb = 0.04897468161869667
+hlittle = 67.66 / 100
+cosmo_params = p21c.CosmoParams(hlittle=hlittle, OMm=OMm, OMb=OMb) # adding cosmology used to 21cmFAST.
+OMl = 1 - OMm # assuming a flat cosmology - as is done by 21cmFAST.
+
+""" Defining physical constants. """
+c = 299792458 # speed of light, in m/s
+k_B = 1.380649e-23 # Boltzmann constant, in J/K
+T_CMB = 2.7255 # CMB temperature, in K
+A_10 = 2.86888e-15 # einstein coefficient for hi spin-flip transition
+m_H = 1.6735e-27 # mass of hydrogen atom
+nu_21 = 1420.405751768 * 10**6 # frequency of hi spin-flip transition, in Hz
+h = 6.63e-34 # Planck's constant
+solar_mass = 1.989 * 10**30 # mass of the sun in kg
+Mpc_to_m = 3.0857e+22 # conversion from Mpc to m
 G = 6.67430e-11 # gravitational constant, in N m^2 / kg^2
 hydrogen_baryon_frac = 0.75
 
-def push_mass_to_halo(x, y):
+
+def push_mass_to_halo(x):
     """
-    Iterates over the input overdensity field x, pushing overdensities to their local maxima, moving them to the output array y. Iterates once forwards and once backwards.
+    Moves the masses to their local maxima by calculating the gradient of the mass field and determining how much mass is entering and leaving each cell.
 
     Parameters
     ----------
     x : NDarray
-        The overdensity field produced by 21cmFAST (dimensionless).
-    y : NDarray
-        An empty array that will contain the final halo mass distribution (in solar masses).
+        The mass field, calculated from the overdensity field produced by 21cmFAST. Units of solar masses.
+
+    Returns
+    -------
+    new_field : NDarray
+        The intermediate mass/halo field produced after this iteration.
     """
-    dims_i = np.shape(x)[0]
-    dims_j = np.shape(x)[1]
-    dims_k = np.shape(x)[2]
+    # calculating the gradient, and setting the edge values to zero (to remove edge effects).
+    grad_full = np.gradient(x)
+    grad = np.zeros(np.shape(grad_full))
+    grad[0][1:-1, 1:-1, 1:-1] = grad_full[0][1:-1, 1:-1, 1:-1]
+    grad[1][1:-1, 1:-1, 1:-1] = grad_full[1][1:-1, 1:-1, 1:-1]
+    grad[2][1:-1, 1:-1, 1:-1] = grad_full[2][1:-1, 1:-1, 1:-1]
 
-    # forward iteration:
-    for i in range(int(dims_i-1)):
-        for j in range(int(dims_j-1)):
-            for k in range(int(dims_k-1)):
-                if x[i, j, k] >= 0.01:
-                    if x[i+1, j, k] >= x[i, j, k]:
-                        if x[i, j+1, k] >= x[i+1, j, k]:
-                            if x[i, j, k+1] >= x[i, j+1, k]:
-                                y[i, j, k+1] += x[i, j, k]
-                            else: 
-                                y[i, j+1, k] += x[i, j, k]
-                        elif x[i, j, k+1] >= x[i+1, j, k]:
-                            y[i, j, k+1] += x[i, j, k]
-                        else:
-                            y[i+1, j, k] += x[i, j, k]
-                    elif x[i, j+1, k] >= x[i, j, k]:
-                        if x[i, j, k+1] >= x[i, j+1, k]:
-                            y[i, j, k+1] += x[i, j, k]
-                        else:
-                            y[i, j+1, k] += x[i, j, k]
-                    elif x[i, j, k+1] >= x[i, j, k]:
-                        y[i, j, k+1] += x[i, j, k]
-                    else:
-                        y[i, j, k] += x[i, j, k]
+    # contributions from 6 nearest neighbours
+    field_change = - np.roll(grad[0], [-1, 0, 0], axis=(0, 1, 2)) + np.roll(grad[0], [1, 0, 0], axis=(0, 1, 2)) - np.roll(grad[1], [0, -1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [0, 1, 0], axis=(0, 1, 2)) - np.roll(grad[2], [0, 0, -1], axis=(0, 1, 2)) + np.roll(grad[2], [0, 0, 1], axis=(0, 1, 2))
 
-    end_ind_i = int(dims_i - 1)
-    end_ind_j = int(dims_j - 1)
-    end_ind_k = int(dims_k - 1)
-    for j in range(int(dims_j)):
-        for k in range(int(dims_k)):
-            y[end_ind_i, j, k] += x[end_ind_i, j, k]
-    for i in range(int(dims_i-1)):
-        for k in range(int(dims_k)):
-            y[i, end_ind_j, k] += x[i, end_ind_j, k]
-    for i in range(int(dims_i-1)):
-        for j in range(int(dims_j-1)):
-            y[i, j, end_ind_k] += x[i, j, end_ind_k]
+    # contributions from 10 second nearest neighbours
+    field_change += 0.5*(np.roll(grad[0], [1, 1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [1, 1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [0, 1, 1], axis=(0, 1, 2)) + np.roll(grad[2], [0, 1, 1], axis=(0, 1, 2)) + np.roll(grad[0], [1, 0, 1], axis=(0, 1, 2)) + np.roll(grad[2], [1, 0, 1], axis=(0, 1, 2)))
+    field_change += 0.5*(- np.roll(grad[0], [-1, 1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [-1, 1, 0], axis=(0, 1, 2)) - np.roll(grad[1], [0, -1, 1], axis=(0, 1, 2)) + np.roll(grad[2], [0, -1, 1], axis=(0, 1, 2)) + np.roll(grad[0], [1, 0, -1], axis=(0, 1, 2)) - np.roll(grad[2], [1, 0, -1], axis=(0, 1, 2)))
+    field_change += 0.5*(np.roll(grad[0], [1, -1, 0], axis=(0, 1, 2)) - np.roll(grad[1], [1, -1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [0, 1, -1], axis=(0, 1, 2)) - np.roll(grad[2], [0, 1, -1], axis=(0, 1, 2)) - np.roll(grad[0], [-1, 0, 1], axis=(0, 1, 2)) + np.roll(grad[2], [-1, 0, 1], axis=(0, 1, 2)))
+    field_change -= 0.5*(np.roll(grad[0], [-1, -1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [-1, -1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [0, -1, -1], axis=(0, 1, 2)) + np.roll(grad[2], [0, -1, -1], axis=(0, 1, 2)) + np.roll(grad[0], [-1, 0, -1], axis=(0, 1, 2)) + np.roll(grad[2], [-1, 0, -1], axis=(0, 1, 2)))
 
+    # contributions from 8 third nearest neighbours
+    field_change += 1 / 3 * (np.roll(grad[0], [1, 1, 1], axis=(0, 1, 2)) + np.roll(grad[1], [1, 1, 1], axis=(0, 1, 2)) + np.roll(grad[2], [1, 1, 1], axis=(0, 1, 2)))
+    field_change += 1 / 3 * (-np.roll(grad[0], [-1, 1, 1]) + np.roll(grad[1], [-1, 1, 1]) + np.roll(grad[2], [-1, 1, 1]) + np.roll(grad[0], [1, -1, 1]) - np.roll(grad[1], [1, -1, 1]) + np.roll(grad[2], [1, -1, 1]) + np.roll(grad[0], [1, 1, -1]) + np.roll(grad[1], [1, 1, -1]) - np.roll(grad[2], [1, 1, -1]))
+    field_change += 1 / 3 * (-np.roll(grad[0], [-1, -1, 1], axis=(0, 1, 2)) + -np.roll(grad[1], [-1, -1, 1], axis=(0, 1, 2)) + np.roll(grad[2], [-1, -1, 1], axis=(0, 1, 2)) + np.roll(grad[0], [1, -1, -1], axis=(0, 1, 2)) - np.roll(grad[1], [1, -1, -1], axis=(0, 1, 2)) - np.roll(grad[2], [1, -1, -1], axis=(0, 1, 2)) - np.roll(grad[0], [-1, 1, -1], axis=(0, 1, 2)) + np.roll(grad[1], [-1, 1, -1], axis=(0, 1, 2)) - np.roll(grad[2], [-1, 1, -1], axis=(0, 1, 2)))
+    field_change -= 1 / 3 * (np.roll(grad[0], [-1, -1, -1], axis=(0, 1, 2)) + np.roll(grad[1], [-1, -1, -1], axis=(0, 1, 2)) + np.roll(grad[2], [-1, -1, -1], axis=(0, 1, 2)))
 
-    # reverse iteration:
-    x = y.copy()
-    y = np.zeros(np.shape(x))
-    for i in reversed(range(1, int(dims_i))):
-        for j in reversed(range(1, int(dims_j))):
-            for k in reversed(range(1, int(dims_k))):
-                if x[i, j, k] >= 0.01:
-                    if x[i-1, j, k] >= x[i, j, k]:
-                        if x[i, j-1, k] >= x[i-1, j, k]:
-                            if x[i, j, k-1] >= x[i, j-1, k]:
-                                y[i, j, k-1] += x[i, j, k]
-                            else: 
-                                y[i, j-1, k] += x[i, j, k]
-                        elif x[i, j, k-1] >= x[i-1, j, k]:
-                            y[i, j, k-1] += x[i, j, k]
-                        else:
-                            y[i-1, j, k] += x[i, j, k]
-                    elif x[i, j-1, k] >= x[i, j, k]:
-                        if x[i, j, k-1] >= x[i, j-1, k]:
-                            y[i, j, k-1] += x[i, j, k]
-                        else:
-                            y[i, j-1, k] += x[i, j, k]
-                    elif x[i, j, k-1] >= x[i, j, k]:
-                        y[i, j, k-1] += x[i, j, k]
-                    else:
-                        y[i, j, k] += x[i, j, k]
+    new_field = x + field_change
+    new_field[new_field < 0] = 0 # removing negative mass values
+    new_field = np.sum(x) / np.sum(new_field) * new_field # normalising to original field to account for mass gain by removing negative masses
 
-    for j in reversed(range(0, int(dims_j))):
-        for k in reversed(range(0, int(dims_k))):
-            y[0, j, k] += x[0, j, k]
-    for i in reversed(range(1, int(dims_i))):
-        for k in reversed(range(0, int(dims_k))):
-            y[i, 0, k] += x[i, 0, k]
-    for i in reversed(range(1, int(dims_i))):
-        for j in reversed(range(1, int(dims_j))):
-            y[i, j, 0] += x[i, j, 0]
+    return new_field
 
 
 def get_delta_vir(z): 
@@ -194,7 +163,7 @@ def get_conc(M, z): # returns halo concentration (dimensionless)
     return conc
 
 
-def find_halos(overdensity_field, box_len, HII_dim, max_count=50, overdens_cap=1.686, sanity_check=False): 
+def find_halos(overdensity_field, box_len, HII_dim, max_count=200, overdens_cap=0, sanity_check=False): 
     """
     Returns mass and centre position of halos in solar masses. 
     Stops at either no change after algorithm applied, or when maximum number of iterations has been reached.
@@ -208,9 +177,9 @@ def find_halos(overdensity_field, box_len, HII_dim, max_count=50, overdens_cap=1
     HII_dim : int
         The number of cells in each of the spatial dimensions of the box / cone.
     max_count : int (optional)
-        The maximum number of times the halo finder will iterate over the input field. Defaults to 50.
+        The maximum number of times the halo finder will iterate over the input field. Defaults to 200.
     overdens_cap : float (optional)
-        The minimum overdensity for which a cell is considered to be associated with a halo. Defaults to 1.686 (from P-S).
+        The minimum overdensity for which a cell is considered to be associated with a halo. Defaults to 0.
     sanity_check : bool (optional)
         Whether to print the total mass moved after each iteration, for bug testing. Defaults to False.
 
@@ -228,15 +197,17 @@ def find_halos(overdensity_field, box_len, HII_dim, max_count=50, overdens_cap=1
     mass_field = (1 + new_overdensity_field) * crit_M_dens * (box_len / HII_dim * Mpc_to_m)**3 / (solar_mass) * (1 / (1 + np.mean(overdensity_field))) # converting to solar masses (critical density at z = 3 since comoving box) CHECK
 
     mass_field[overdensity_field < overdens_cap] = 0 # removing underdense regions
-    halo_field = np.zeros(np.shape(overdensity_field)) # empty array to put masses into
-    push_mass_to_halo(mass_field, halo_field)
+    halo_field = push_mass_to_halo(mass_field)
     count = 0
     match = 10 # initialising check as arbitrary non-zero number
 
-    while count <= max_count and match >= 1:
+    while count <= max_count - 1 and match >= 1:
         old_field = halo_field.copy()
-        halo_field = np.zeros(np.shape(overdensity_field)) 
-        push_mass_to_halo(old_field, halo_field) # algorithm to push masses to central maxima
+        halo_field = push_mass_to_halo(old_field) # algorithm to push masses to central maxima
+        old_field = halo_field.copy()
+        old_field = old_field[::-1, ::-1, ::-1]
+        halo_field = push_mass_to_halo(old_field)
+        halo_field = halo_field[::-1, ::-1, ::-1]
         count += 1
         match = np.sum(abs(halo_field - old_field))
         if sanity_check:
@@ -460,7 +431,7 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0):
         The distribution of halo masses across the field, in solar masses.
     """
     image = dens
-    image[dens < 1.686] = 0
+    image[dens < overdens_cap] = 0
 
     distance = ndi.distance_transform_edt(image)
     labels = watershed(-distance)
@@ -479,10 +450,10 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0):
     mass_field[dens < overdens_cap] = 0 # removing underdense regions
 
     for i in range(np.max(labels)):
-        current_halo = np.multiply((labels == i).astype(int), mass_field)
+        current_halo = np.multiply((labels == (i+1)).astype(int), mass_field)
         halo_centre = np.unravel_index(np.argmax(current_halo, axis=None), current_halo.shape)
         halo_mass = np.sum(current_halo)
         halo_field[halo_centre] += halo_mass
-        print(i, end="\r")
+        print(int(i+1), end="\r")
     
     return halo_field

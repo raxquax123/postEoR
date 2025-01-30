@@ -3,6 +3,9 @@
 import py21cmfast as p21c
 import numpy as np
 import os
+import postEoR.tools as tools
+from postEoR.objects import Ltcone, Box
+from postEoR.tools import cosmo_params, hlittle, solar_mass, Mpc_to_m, h, c, A_10, m_H, k_B, nu_21, OMm, OMl
 
 p21c.global_params.RecombPhotonCons = 1
 p21c.global_params.PhotonConsEndCalibz = 2.5
@@ -10,30 +13,10 @@ p21c.FlagOptions.USE_TS_FLUCT = False
 p21c.FlagOptions.INHOMO_RECO = True
 p21c.FlagOptions.PHOTON_CONS = True
 
-""" Defining the cosmology used. Here, using Planck18. """
-OMm = 0.30964144154550644
-OMb = 0.04897468161869667
-hlittle = 67.66 / 100
-cosmo_params = p21c.CosmoParams(hlittle=hlittle, OMm=OMm, OMb=OMb) # adding cosmology used to 21cmFAST.
-OMl = 1 - OMm # assuming a flat cosmology - as is done by 21cmFAST.
-
-""" Defining physical constants. """
-c = 299792458 # speed of light, in m/s
-k_B = 1.380649e-23 # Boltzmann constant, in J/K
-T_CMB = 2.7255 # CMB temperature, in K
-A_10 = 2.86888e-15 # einstein coefficient for hi spin-flip transition
-m_H = 1.6735e-27 # mass of hydrogen atom
-nu_21 = 1420.405751768 * 10**6 # frequency of hi spin-flip transition, in Hz
-h = 6.63e-34 # Planck's constant
-solar_mass = 1.989 * 10**30 # mass of the sun in kg
-Mpc_to_m = 3.0857e+22 # conversion from Mpc to m
-
-import postEoR.tools as tools
-from postEoR.objects import Ltcone, Box
-
 if not os.path.exists('_cache'):
     os.mkdir('_cache')
 p21c.config['direc'] = '_cache'
+
 
 def generate_box(
     z : float, 
@@ -61,7 +44,7 @@ def generate_box(
     Returns
     -------
     box : Box object
-        Object containing the BT, overdensity, and halo fields of the coeval box, in addition to defining information.
+        Object containing the BT, overdensity, and halo fields of the coeval box, in addition to defining information such as number of cells in each dimension and physical box length.
     
     Example usage
     -------------

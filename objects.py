@@ -7,35 +7,16 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from abc import ABC
 from postEoR.tools import hi_from_halos_2
-from postEoR.generation import hlittle, OMm, OMl, c
+from postEoR.tools import hlittle, OMm, OMl, c
 from matplotlib.ticker import AutoLocator
 from hmf import MassFunction
+plt.rcParams.update({'font.size': 15})
 
 
 class Base(ABC):
     """
     Abstract class used to access various functions applicable across both objects.
     """
-    def cell_size(self) -> float:
-        """
-        Calculates cell size used in the lightcone in Mpc.
-
-        Returns
-        -------
-        size : float
-            The cell length along each dimension in Mpc.
-        
-        Example usage
-        -------------
-        >>> from postEoR import generation as gen
-        >>> cone = gen.generate_cone(z_centr=4, delta_z=0.4, HII_dim=250, box_len=400, overdens_cap=0, use_watershed=True)
-        >>> print(cone.cell_size())
-        1.6
-        """
-        size = self.box_len / self.HII_dim 
-
-        return size
-    
 
     def get_distance(self) -> float:
         """
@@ -73,6 +54,8 @@ class Base(ABC):
         save_loc="hmf.png", 
         save_fig=True,
         clear_prev_plot=False,
+        Mmin=9,
+        Mmax=12,
     ):
         """
         Generates a halo mass function at a given redshift. Used for testing of the halo finder.
@@ -108,7 +91,7 @@ class Base(ABC):
         >>> bins, counts, los_dist = box.gen_hmf(color="tab:orange")
         """
         if set_bins:
-            bins1 = np.geomspace(1e+10, 1e+13, 10)
+            bins1 = np.geomspace(10**Mmin, 10**Mmax, 10)
             counts, bins = np.histogram(self.halo_field, bins1)
         else:
             counts, bins = np.histogram(self.halo_field)
@@ -121,9 +104,10 @@ class Base(ABC):
         if save_fig:
             if clear_prev_plot:
                 plt.clf() # clearing any previous plots
+            plt.rcParams['figure.figsize'] = [9, 6]
             bins_plot = (bins[1:] + bins[:-1]) / 2
             plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*self.box_len**2*los_dist)), histtype='step', label='z = ' + str(self.z), color=str(color))
-            mf1 = MassFunction(z = self.z,
+            mf1 = MassFunction(Mmin=Mmin, Mmax=Mmax, z = self.z,
                         cosmo_params={"Om0":OMm}, 
                         hmf_model="Watson") 
             
@@ -131,6 +115,10 @@ class Base(ABC):
             plt.title(title)
             plt.yscale("log")
             plt.xscale("log")
+            plt.legend()
+            plt.ylabel('$\dfrac{dn}{d\log M}$ (Mpc$^{-3}$)')
+            plt.xlabel('M (M$_{\odot}$)')
+            plt.xlim(10**Mmin, 10**Mmax)
 
             plt.savefig(str(save_loc))
 
@@ -183,7 +171,7 @@ class Base(ABC):
         HI_field = hi_from_halos_2(self.halo_field, self.z)
 
         if set_bins:
-            bins1 = np.geomspace(1e+10, 1e+13, 10)
+            bins1 = np.geomspace(1e+6, 1e+9, 10)
             counts, bins = np.histogram(HI_field, bins1)
         else:
             counts, bins = np.histogram(HI_field)
@@ -194,6 +182,7 @@ class Base(ABC):
         if save_fig:
             if clear_prev_plot:
                 plt.clf() # clearing any previous plots
+            plt.rcParams['figure.figsize'] = [9, 6]
             bins_plot = (bins[1:] + bins[:-1]) / 2
             plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*self.box_len**2*los_dist)), histtype='step', label='z = ' + str(self.z), color=str(color))
             mf1 = MassFunction(z = self.z,
@@ -204,6 +193,9 @@ class Base(ABC):
             plt.title(title)
             plt.yscale("log")
             plt.xscale("log")
+            plt.ylabel('$\dfrac{dn}{d\log M}$ (Mpc$^{-3}$)')
+            plt.xlabel('M (M$_{\odot}$)')
+            plt.legend()
 
             plt.savefig(str(save_loc))
 
@@ -223,7 +215,7 @@ class Base(ABC):
         clear_prev_plot=False,
     ): 
         """
-        Calculates the power spectrum for the input field x. Can also automatically save the figure.
+        Calculates the spherical power spectrum for the input field x. Can also automatically save the figure.
 
         Parameters
         ----------
@@ -275,9 +267,9 @@ class Base(ABC):
         dims = np.shape(x)
 
         # obtaining k values and k bins to use in ps
-        ksx = np.fft.fftfreq(dims[0], (box_len / HII_dim)) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
-        ksy = np.fft.fftfreq(dims[1], (box_len / HII_dim)) * 2 * np.pi
-        ksz = np.fft.fftfreq(dims[2], (box_len / HII_dim)) * 2 * np.pi
+        ksx = np.fft.fftfreq(dims[0], self.cell_size) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
+        ksy = np.fft.fftfreq(dims[1], self.cell_size) * 2 * np.pi
+        ksz = np.fft.fftfreq(dims[2], self.cell_size) * 2 * np.pi
         kx, ky, kz = np.meshgrid(ksx, ksy, ksz) # converting to a 3d array
         k = (kx**2+ky**2+kz**2)**0.5 # spherical k-values
         k = k.reshape(np.size(k)) # converting to 1d array for use in binned_statistic
@@ -300,7 +292,7 @@ class Base(ABC):
         Abins1, _, _ = stats.binned_statistic(k, ps1, statistic = "mean", bins = kbins) # binning power
         error1, _, _ = stats.binned_statistic(k, ps1, statistic = "std", bins = kbins) # obtaining standard deviation in each bin
 
-        new_k = np.array([x for x in kvals if x <= (2*np.pi / (2*box_len / HII_dim))]) # removing values above the nyquist frequency (corresponds to sampling inside the cells)
+        new_k = np.array([x for x in kvals if x <= (2*np.pi / (2*self.cell_size))]) # removing values above the nyquist frequency (corresponds to sampling inside the cells)
         plot1 = Abins1[0:(np.size(new_k))]
         error1 = error1[0:(np.size(new_k))] / (bin_count1[0:(np.size(new_k))])**0.5
 
@@ -312,6 +304,7 @@ class Base(ABC):
         if save_fig:
             if clear_prev_plot:
                 plt.clf() # clearing any previous plots
+            plt.rcParams['figure.figsize'] = [9, 6]
             plt.plot(new_k, plot1, color=str(color), label="z = " + str(self.z) + ", " + str(field), linestyle=str(linestyle))
 
             plt.yscale("log")
@@ -339,7 +332,7 @@ class Base(ABC):
         clear_prev_plot=False,
     ): 
         """
-        Calculates the dimensionless power spectrum for the input field x. 
+        Calculates the dimensionless spherical power spectrum for the input field x. 
 
         Parameters
         ----------
@@ -390,9 +383,9 @@ class Base(ABC):
         dims = np.shape(x)
 
         # obtaining k values and k bins to use in ps
-        ksx = np.fft.fftfreq(dims[0], (box_len / HII_dim)) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
-        ksy = np.fft.fftfreq(dims[1], (box_len / HII_dim)) * 2 * np.pi
-        ksz = np.fft.fftfreq(dims[2], (box_len / HII_dim)) * 2 * np.pi
+        ksx = np.fft.fftfreq(dims[0], (self.cell_size)) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
+        ksy = np.fft.fftfreq(dims[1], (self.cell_size)) * 2 * np.pi
+        ksz = np.fft.fftfreq(dims[2], (self.cell_size)) * 2 * np.pi
         kx, ky, kz = np.meshgrid(ksx, ksy, ksz) # converting to a 3d array
         k = (kx**2+ky**2+kz**2)**0.5 # spherical k-values
         k = k.reshape(np.size(k)) # converting to 1d array for use in binned_statistic
@@ -413,7 +406,7 @@ class Base(ABC):
         Abins1, _, _ = stats.binned_statistic(k, ps1, statistic = "mean", bins = kbins) # binning power
         error1, _, _ = stats.binned_statistic(k, ps1, statistic = "std", bins = kbins) # obtaining standard deviation in each bin
 
-        new_k = np.array([x for x in kvals if x <= (2*np.pi / (2*box_len / HII_dim))]) # removing values above the nyquist frequency (corresponds to sampling inside the cells)
+        new_k = np.array([x for x in kvals if x <= (2*np.pi / (2*self.cell_size))]) # removing values above the nyquist frequency (corresponds to sampling inside the cells)
         plot1 = Abins1[0:(np.size(new_k))] 
         error1 = error1[0:(np.size(new_k))] / (bin_count1[0:(np.size(new_k))])**0.5 
 
@@ -428,6 +421,7 @@ class Base(ABC):
         if save_fig:
             if clear_prev_plot:
                 plt.clf() # clearing any previous plots
+            plt.rcParams['figure.figsize'] = [9, 6]
             plt.plot(new_k, plot1, color=str(color), label="z = " + str(self.z) + ", " + str(field), linestyle=str(linestyle))
 
             plt.yscale("log")
@@ -480,7 +474,7 @@ class Base(ABC):
 
         # box coordinates
         fin_size = np.shape(x)[0] / self.HII_dim * self.box_len
-        dx, dy = self.box_len / self.HII_dim, self.box_len / self.HII_dim 
+        dx, dy = self.cell_size, self.cell_size 
         y1, x1 = np.mgrid[slice(dy / 2, fin_size, dy), slice(dx / 2, fin_size, dx)]
 
         # plotting colormaps of overdensity, neutral fraction, brightness temperature
@@ -521,9 +515,9 @@ class Base(ABC):
         dims = np.shape(dens)
 
         # obtaining k values and k bins to use in ps
-        ksx = np.fft.fftfreq(dims[0], (self.box_len / self.HII_dim)) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
-        ksy = np.fft.fftfreq(dims[1], (self.box_len / self.HII_dim)) * 2 * np.pi
-        ksz = np.fft.fftfreq(dims[2], (self.box_len / self.HII_dim)) * 2 * np.pi
+        ksx = np.fft.fftfreq(dims[0], (self.cell_size)) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
+        ksy = np.fft.fftfreq(dims[1], (self.cell_size)) * 2 * np.pi
+        ksz = np.fft.fftfreq(dims[2], (self.cell_size)) * 2 * np.pi
         kx, ky, kz = np.meshgrid(ksx, ksy, ksz) # converting to a 3d array
         k = (kx**2+ky**2+kz**2)**0.5 # spherical k-values
         k = k.reshape(np.size(k)) # converting to 1d array for use in binned_statistic
@@ -608,6 +602,7 @@ class Ltcone(Base):
         self.BT_field = BT_field
         self.Lightconer = Lightconer
         self.z = (z_start + z_end) / 2
+        self.cell_size = box_len / HII_dim
 
 
     def plot_lightcone(
@@ -696,6 +691,87 @@ class Ltcone(Base):
 
         plt.savefig(str(save_loc))
 
+    
+    def get_cylindrical_ps(
+        self,
+        title="Cylindrical power spectrum",
+        save_loc="cylindrical_ps.png",
+        ):
+        """
+        Calculate and plot the cylindrical power spectrum of the lightcone. NEEDS FURTHER TESTING
+
+        Parameters
+        ----------
+        title : str (optional)
+            The title of the output plot. Defaults to "Cylindrical power spectrum".
+        save_loc : str (optional)
+            The path to the save location of the output plot. Defaults to cylindrical_ps.png in the working directory.
+        """
+        BT = self.BT_field
+        power0 = np.zeros(np.shape(BT)[:-1])
+        power2 = np.zeros(np.shape(BT)[2])
+
+        # taking the mean of all the individual perp and parallel ps
+        for i in range(np.shape(BT)[0]):
+            for j in range(np.shape(BT)[1]):
+                power2 += np.abs(np.fft.fft(BT[i, j, :]))**2
+        for i in range(np.shape(BT)[2]):
+            power0 += np.abs(np.fft.fftn(BT[:, :, i]))**2
+        power2 /= np.shape(BT)[0] * np.shape(BT)[1]
+        power0 /= np.shape(BT)[2]
+
+        n1 = np.size(power0)
+        n2 = np.size(power2)
+        dims1 = np.shape(BT)[0]
+        dims2 = np.shape(BT)[2]
+
+        para = power2.reshape(n2)
+        perp = power0.reshape(n1) 
+
+        # obtaining the corresponding wavenumbers
+        ks1 = np.fft.fftfreq(dims1, (self.cell_size)) * 2 * np.pi
+        kx, ky = np.meshgrid(ks1, ks1) # converting to a 2d array
+        k1 = (kx**2+ky**2)**0.5 # perp k-values
+        k1 = k1.reshape(np.size(k1)) # converting to 1d array for use in binned_statistic
+        kbins1 = np.geomspace(np.min(k1[np.nonzero(k1)]), np.max(k1), dims1//16+1) # sampling in log space - defining bin edges
+        kvals1 = ((kbins1[1:] + kbins1[:-1])) / 2
+        k2 = np.abs(np.fft.fftfreq(dims2, np.abs(self.get_distance() / dims2)) * 2 * np.pi)
+        kbins2 = np.geomspace(np.min(k2[np.nonzero(k2)]), np.max(k2), dims2//16+1) # sampling in log space - defining bin edges
+        kvals2 = ((kbins2[1:] + kbins2[:-1])) / 2
+
+        Abins1, _, _ = stats.binned_statistic(k1, perp, statistic = "mean", bins = kbins1)
+        Abins2, _, _ = stats.binned_statistic(k2, para, statistic = "mean", bins = kbins2)
+
+        # removing values past the nyquist frequency | normalising by the sampling volume
+        new_k_1 = np.array([x for x in kvals1 if x <= (2*np.pi / (2*self.box_len / self.HII_dim))])
+        new_k_2 = np.array([x for x in kvals2 if x <= (2*np.pi / (2* np.abs(self.get_distance()) / dims2))])
+        plot1 = Abins1[0:(np.size(new_k_1))] / (np.max(new_k_1)**2 * np.pi * 4)
+        plot2 = Abins2[0:(np.size(new_k_2))] / (np.max(new_k_2) * 2 * np.pi)
+
+        # removing NaN values and adding a k=0 value for plotting
+        new_k_1 = new_k_1[~np.isnan(plot1)]
+        new_k_1 = np.insert(new_k_1, 0, np.min(k1[np.nonzero(k1)]))
+        plot1 = plot1[~np.isnan(plot1)]
+        new_k_2 = new_k_2[~np.isnan(plot2)]
+        new_k_2 = np.insert(new_k_2, 0, np.min(k2[np.nonzero(k2)]))
+        plot2 = plot2[~np.isnan(plot2)]
+        new_k_2 = new_k_2[:-1]
+        plot2 = plot2[:-1] # this truncation is just bc some weird sampling things were happening at the final wavenumber - think it was going inside the cell
+
+        cross = np.zeros((np.size(plot2), np.size(plot1))) # calculating the cross power spectrum
+        for i in range(np.size(plot1)):
+            for j in range(np.size(plot2)):
+                cross[j,i] = plot1[i] * plot2[j]
+
+        cb = plt.pcolormesh(np.log(new_k_1),np.log(new_k_2), np.log(cross), cmap = "viridis")
+        plt.xlabel("log(k$_{\perp}$, (Mpc)$^{-1}$)")
+        plt.ylabel("log(k$_\|$, (Mpc)$^{-1}$)")
+        cbar = plt.colorbar(cb)
+        cbar.set_label("log(P$_{cross}$, (mK)$^2$)")
+        plt.title(str(title))
+
+        plt.savefig(str(save_loc))
+
 
 
 class Box(Base):
@@ -732,3 +808,4 @@ class Box(Base):
         self.density_field = density_field
         self.halo_field = halo_field
         self.BT_field = BT_field
+        self.cell_size = box_len / HII_dim
