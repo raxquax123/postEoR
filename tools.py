@@ -66,7 +66,7 @@ def push_mass_to_halo(x):
     field_change -= 1 / 3 * (np.roll(grad[0], [-1, -1, -1], axis=(0, 1, 2)) + np.roll(grad[1], [-1, -1, -1], axis=(0, 1, 2)) + np.roll(grad[2], [-1, -1, -1], axis=(0, 1, 2)))
 
     new_field = x + field_change
-    new_field[new_field < 0] = 0 # removing negative mass values
+    new_field[new_field < 10**7] = 0 # removing negative mass values and non-halo density maxima
     new_field = np.sum(x) / np.sum(new_field) * new_field # normalising to original field to account for mass gain by removing negative masses
 
     return new_field
@@ -435,7 +435,7 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0):
 
     distance = ndi.distance_transform_edt(image)
     labels = watershed(-distance)
-    print(np.max(labels))
+    print(np.max(labels)) # prints total number of halos, to keep track of mass allocation progress
 
     halo_field = np.zeros([HII_dim, HII_dim, HII_dim])
 
