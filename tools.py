@@ -4,7 +4,6 @@ import numpy as np
 from scipy.integrate import quad
 import scipy.ndimage as ndimage
 from skimage.segmentation import watershed
-from scipy import ndimage as ndi
 import py21cmfast as p21c
 
 """ Defining / importing parameters used. """
@@ -409,7 +408,7 @@ def create_spherical_profile(halo, z, box_len, HII_dim, max_rad=1):
     return sph_prof_fin
 
 
-def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0):
+def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0, connectivity=1, compactness=0):
     """
     Returns mass and centre position of halos in solar masses. 
     Stops at either no change after algorithm applied, or when maximum number of iterations has been reached.
@@ -430,19 +429,19 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0):
     halo_field : NDarray
         The distribution of halo masses across the field, in solar masses.
     """
-    image = dens
+    image = dens.copy()
     image[dens < overdens_cap] = 0
 
-    distance = ndi.distance_transform_edt(image)
-    labels = watershed(-distance)
+    labels = watershed(-image, connectivity=connectivity, compactness=compactness) 
     print(np.max(labels)) # prints total number of halos, to keep track of mass allocation progress
+    dims = np.shape(dens)
 
-    halo_field = np.zeros([HII_dim, HII_dim, HII_dim])
+    halo_field = np.zeros([dims[0], dims[1], dims[2]])
 
     H_0_std_units = (hlittle * 100 * 1000) / (Mpc_to_m)
     z_comov = 0
     H = H_0_std_units * (OMm*(1+z_comov)**3 + OMl) ** 0.5
-    crit_M_dens = (3 * H ** 2) / (8 * np.pi * G) * (OMm * (1+z_comov)**3) / (OMm*(1+z_comov)**3 + OMl) # using the critical density at a set redshift as the simulation is comoving.
+    crit_M_dens = (3 * H ** 2) / (8 * np.pi * G) * (OMm * (1+z_comov)**3) / (OMm * (1+z_comov)**3 + OMl) # using the critical density at a set redshift as the simulation is comoving.
 
     new_overdensity_field = dens.copy()
     mass_field = (1 + new_overdensity_field) * crit_M_dens * (box_len / HII_dim * Mpc_to_m)**3 / (solar_mass) * (1 / (1 + np.mean(dens))) 
@@ -455,5 +454,7 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0):
         halo_mass = np.sum(current_halo)
         halo_field[halo_centre] += halo_mass
         print(int(i+1), end="\r")
+
+    halo_field[halo_field < 10**7] = 0 # removing small mass regions that are unlikely to be halos
     
     return halo_field

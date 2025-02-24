@@ -8,3 +8,5 @@ __pycache__/tools.cpython-311.pyc
 *.hkl
 __pycache__/objects.cpython-311.pyc
 **/__pycache__/
+script.py
+nbody_meshes/

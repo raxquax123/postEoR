@@ -145,7 +145,6 @@ def generate_cone(
     lightcone = p21c.run_lightcone(
         lightconer=lcn,
         global_quantities=("brightness_temp", "density", 'xH_box'),
-        direc='_cache',
         user_params=user_params,
         cosmo_params=cosmo_params,
         random_seed=1122

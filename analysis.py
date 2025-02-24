@@ -1,4 +1,4 @@
-""" Analysis functions. Not needed if analysing quantities produced by postEoR, as the classes contain the required analysis functions, but here for analysis of other arrays if needed. """
+""" Analysis functions. Not needed if analysing quantities produced by postEoR, as the classes import the required analysis functions, but here for analysis of other arrays if needed. """
 
 import scipy.stats as stats
 import numpy as np
@@ -8,9 +8,10 @@ import postEoR.tools as tools
 from postEoR.tools import hlittle, OMm, OMl
 from postEoR.objects import Box, Ltcone
 import matplotlib.pyplot as plt
+plt.rcParams.update({'font.size': 15})
 
 
-def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=True): 
+def get_PS(x, box_len, HII_dim, kbins=None, remove_nan=True): 
     """
     Calculates the power spectrum for the input field x.
 
@@ -48,8 +49,9 @@ def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=T
     k = k.reshape(np.size(k)) # converting to 1d array for use in binned_statistic
 
     try: # check for input bins, and generate if none / invalid provided
-        if np.isnan(kbins.any()):
+        if kbins is None:
             kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1) # sampling in log space - defining bin edges
+            print("Generated bins.")
         else:
             print("Using input bins")
     except AttributeError:
@@ -58,7 +60,7 @@ def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=T
 
     kvals = ((kbins[1:] + kbins[:-1])) / 2
     power1 = np.abs(np.fft.fftn(x))**2 # computing fft of field and taking absolute squared values
-    ps1 = power1.reshape(np.size(power1)) / (n * (2 * np.pi * HII_dim / box_len)) # converting to 1d array | normalise by sampling volume
+    ps1 = power1.reshape(np.size(power1)) / (n * (HII_dim / box_len)**3) # converting to 1d array | normalise by sampling volume
 
     bin_count1, _, _ = stats.binned_statistic(k, ps1, statistic="count", bins=kbins) # obtaining number of data points in each bin
     Abins1, _, _ = stats.binned_statistic(k, ps1, statistic = "mean", bins = kbins) # binning power
@@ -76,7 +78,7 @@ def get_PS(x, box_len, HII_dim, kbins=np.asarray([np.nan, np.nan]), remove_nan=T
     return new_k, plot1, error1
 
 
-def get_dimless_PS(x, box_len, HII_dim:int, kbins=np.asarray([np.nan, np.nan]), remove_nan=True): 
+def get_dimless_PS(x, box_len, HII_dim:int, kbins=None, remove_nan=True): 
     """
     Calculates the dimensionless power spectrum for the input field x.
 
@@ -102,41 +104,7 @@ def get_dimless_PS(x, box_len, HII_dim:int, kbins=np.asarray([np.nan, np.nan]), 
     error1 : NumPy array
         The error in each bin of the dimensionless power spectrum.
     """
-    n = np.size(x)
-    dims = np.shape(x)
-
-    # obtaining k values and k bins to use in ps
-    ksx = np.fft.fftfreq(dims[0], (box_len / HII_dim)) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
-    ksy = np.fft.fftfreq(dims[1], (box_len / HII_dim)) * 2 * np.pi
-    ksz = np.fft.fftfreq(dims[2], (box_len / HII_dim)) * 2 * np.pi
-    kx, ky, kz = np.meshgrid(ksx, ksy, ksz) # converting to a 3d array
-    k = (kx**2+ky**2+kz**2)**0.5 # spherical k-values
-    k = k.reshape(np.size(k)) # converting to 1d array for use in binned_statistic
-
-    try: # check for input bins, and generate if none / invalid provided
-        if np.isnan(kbins.any()):
-            kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1) # sampling in log space - defining bin edges
-        else:
-            print("Using input bins")
-    except AttributeError:
-        kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1)
-    
-    kvals = ((kbins[1:] + kbins[:-1])) / 2
-    power1 = np.abs(np.fft.fftn(x))**2 # computing fft of field and taking absolute squared values
-    ps1 = power1.reshape(np.size(power1)) / (n * (2 * np.pi * HII_dim / box_len)) # converting to 1d array | normalise by sampling volume
-
-    bin_count1, _, _ = (stats.binned_statistic(k, ps1, statistic="count", bins=kbins)) # obtaining number of data points in each bin
-    Abins1, _, _ = stats.binned_statistic(k, ps1, statistic = "mean", bins = kbins) # binning power
-    error1, _, _ = stats.binned_statistic(k, ps1, statistic = "std", bins = kbins) # obtaining standard deviation in each bin
-
-    new_k = np.array([x for x in kvals if x <= (2*np.pi / (2*box_len / HII_dim))]) # removing values above the nyquist frequency (corresponds to sampling inside the cells)
-    plot1 = Abins1[0:(np.size(new_k))] 
-    error1 = error1[0:(np.size(new_k))] / (bin_count1[0:(np.size(new_k))])**0.5 
-
-    if remove_nan:
-        new_k = new_k[~np.isnan(plot1)]
-        error1 = error1[~np.isnan(plot1)] 
-        plot1 = plot1[~np.isnan(plot1)]
+    new_k, plot1, error1 = get_PS(x, box_len, HII_dim, kbins, remove_nan)
     
     plot1 *= new_k**3 / (2 * np.pi**2) 
     error1 *= new_k**3 / (2 * np.pi**2) 
@@ -355,3 +323,13 @@ def reduce_res(reduction_factor, object: Box | Ltcone):
     cbar4.formatter.set_powerlimits((0, 0))
 
     return binned_fin
+
+
+def get_clustering_ps(x, box_len, HII_dim, kbins=None, remove_nan=True):
+    y = x.copy()
+    y[y>0] = 1
+    y[y<0] = 0
+    y /= np.mean(y)
+    k, ps, err = get_PS(y, box_len, HII_dim, kbins, remove_nan)
+
+    return k, ps, err

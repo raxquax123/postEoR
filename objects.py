@@ -8,6 +8,7 @@ from matplotlib.ticker import StrMethodFormatter
 from abc import ABC
 from postEoR.tools import hi_from_halos_2
 from postEoR.tools import hlittle, OMm, OMl, c
+from postEoR.analysis import get_PS
 from matplotlib.ticker import AutoLocator
 from hmf import MassFunction
 plt.rcParams.update({'font.size': 15})
@@ -215,7 +216,7 @@ class Base(ABC):
         clear_prev_plot=False,
     ): 
         """
-        Calculates the spherical power spectrum for the input field x. Can also automatically save the figure.
+        Calculates the spherical power spectrum for the selected field of the structure. Can also automatically save the figure.
 
         Parameters
         ----------
@@ -241,7 +242,7 @@ class Base(ABC):
         new_k : NDarray
             The wavenumbers corresponding to the power spectrum.
         plot1 : NDarray
-            The power spectrum of the input field x.
+            The power spectrum of the selected field.
         error1 : NDarray
             The error in each bin of the power spectrum.
 
@@ -260,46 +261,8 @@ class Base(ABC):
         else:
             print("Invalid field entered. Defaulting to brightness temperature. \n Valid field options are \"BT\", \"dens\", and \"halo\".")
             x = self.BT_field
-        box_len = self.box_len
-        HII_dim = self.HII_dim
-    
-        n = np.size(x)
-        dims = np.shape(x)
 
-        # obtaining k values and k bins to use in ps
-        ksx = np.fft.fftfreq(dims[0], self.cell_size) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
-        ksy = np.fft.fftfreq(dims[1], self.cell_size) * 2 * np.pi
-        ksz = np.fft.fftfreq(dims[2], self.cell_size) * 2 * np.pi
-        kx, ky, kz = np.meshgrid(ksx, ksy, ksz) # converting to a 3d array
-        k = (kx**2+ky**2+kz**2)**0.5 # spherical k-values
-        k = k.reshape(np.size(k)) # converting to 1d array for use in binned_statistic
-
-        try: # check for input bins, and generate if none / invalid provided
-            if kbins is None:
-                kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1) # sampling in log space - defining bin edges
-                print("Generated bins.")
-            else:
-                print("Using input bins")
-        except AttributeError:
-            print("Incorrect bin type. Generating bins")
-            kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1)
-
-        kvals = ((kbins[1:] + kbins[:-1])) / 2
-        power1 = np.abs(np.fft.fftn(x))**2 # computing fft of field and taking absolute squared values
-        ps1 = power1.reshape(np.size(power1)) / (n * (2 * np.pi * HII_dim / box_len)) # converting to 1d array | normalise by sampling volume
-
-        bin_count1, _, _ = stats.binned_statistic(k, ps1, statistic="count", bins=kbins) # obtaining number of data points in each bin
-        Abins1, _, _ = stats.binned_statistic(k, ps1, statistic = "mean", bins = kbins) # binning power
-        error1, _, _ = stats.binned_statistic(k, ps1, statistic = "std", bins = kbins) # obtaining standard deviation in each bin
-
-        new_k = np.array([x for x in kvals if x <= (2*np.pi / (2*self.cell_size))]) # removing values above the nyquist frequency (corresponds to sampling inside the cells)
-        plot1 = Abins1[0:(np.size(new_k))]
-        error1 = error1[0:(np.size(new_k))] / (bin_count1[0:(np.size(new_k))])**0.5
-
-        if remove_nan:
-            new_k = new_k[~np.isnan(plot1)]
-            error1 = error1[~np.isnan(plot1)]
-            plot1 = plot1[~np.isnan(plot1)]
+        new_k, plot1, error1 = get_PS(x, self.box_len, self.HII_dim, kbins, remove_nan)
 
         if save_fig:
             if clear_prev_plot:
@@ -332,7 +295,7 @@ class Base(ABC):
         clear_prev_plot=False,
     ): 
         """
-        Calculates the dimensionless spherical power spectrum for the input field x. 
+        Calculates the dimensionless spherical power spectrum for the selected field of the structure. 
 
         Parameters
         ----------
@@ -368,52 +331,7 @@ class Base(ABC):
         >>> box = gen.generate_box(z=4)
         >>> k, ps, err = box.get_dimless_ps(field="BT", linestyle="--", save_fig=False)
         """
-        if field == "BT":
-            x = self.BT_field
-        elif field == "dens":
-            x = self.density_field
-        elif field == "halo":
-            x = self.halo_field
-        else:
-            print("Invalid field entered. Defaulting to brightness temperature. \n Valid field options are \"BT\", \"dens\", and \"halo\".")
-            x = self.BT_field
-        box_len = self.box_len
-        HII_dim = self.HII_dim
-        n = np.size(x)
-        dims = np.shape(x)
-
-        # obtaining k values and k bins to use in ps
-        ksx = np.fft.fftfreq(dims[0], (self.cell_size)) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
-        ksy = np.fft.fftfreq(dims[1], (self.cell_size)) * 2 * np.pi
-        ksz = np.fft.fftfreq(dims[2], (self.cell_size)) * 2 * np.pi
-        kx, ky, kz = np.meshgrid(ksx, ksy, ksz) # converting to a 3d array
-        k = (kx**2+ky**2+kz**2)**0.5 # spherical k-values
-        k = k.reshape(np.size(k)) # converting to 1d array for use in binned_statistic
-
-        try: # check for input bins, and generate if none / invalid provided
-            if kbins is None:
-                kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1) # sampling in log space - defining bin edges
-            else:
-                print("Using input bins")
-        except AttributeError:
-            kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1)
-        
-        kvals = ((kbins[1:] + kbins[:-1])) / 2
-        power1 = np.abs(np.fft.fftn(x))**2 # computing fft of field and taking absolute squared values
-        ps1 = power1.reshape(np.size(power1)) / (n * (2 * np.pi * HII_dim / box_len)) # converting to 1d array | normalise by sampling volume
-
-        bin_count1, _, _ = (stats.binned_statistic(k, ps1, statistic="count", bins=kbins)) # obtaining number of data points in each bin
-        Abins1, _, _ = stats.binned_statistic(k, ps1, statistic = "mean", bins = kbins) # binning power
-        error1, _, _ = stats.binned_statistic(k, ps1, statistic = "std", bins = kbins) # obtaining standard deviation in each bin
-
-        new_k = np.array([x for x in kvals if x <= (2*np.pi / (2*self.cell_size))]) # removing values above the nyquist frequency (corresponds to sampling inside the cells)
-        plot1 = Abins1[0:(np.size(new_k))] 
-        error1 = error1[0:(np.size(new_k))] / (bin_count1[0:(np.size(new_k))])**0.5 
-
-        if remove_nan:
-            new_k = new_k[~np.isnan(plot1)]
-            error1 = error1[~np.isnan(plot1)] 
-            plot1 = plot1[~np.isnan(plot1)]
+        new_k, plot1, error1 = self.get_ps(save_fig=False, kbins=kbins, remove_nan=remove_nan)
         
         plot1 *= new_k**3 / (2 * np.pi**2) 
         error1 *= new_k**3 / (2 * np.pi**2) 
@@ -554,6 +472,90 @@ class Base(ABC):
         HI_bias = HI_bias[~np.isnan(HI_bias)]
 
         return k1, HI_bias
+    
+
+    def get_clustering_ps(
+        self, 
+        field="BT", 
+        kbins=None, 
+        remove_nan=True, 
+        color="tab:blue", 
+        linestyle="-", 
+        title="Clustering power spectrum", 
+        save_loc="clustering_ps.png", 
+        save_fig=True,
+        clear_prev_plot=False,
+    ): 
+        """
+        Calculates the spherical clustering power spectrum for the selected field of the structure. Can also automatically save the figure.
+
+        Parameters
+        ----------
+        field : str (optional)
+            The field whose clustering power spectrum is to be calculated. Valid options are "BT", "dens", and "halo". Defaults to brightness temperature.
+        kbins : NDarray (optional)
+            The wavenumber bins to use in binning the power. If none / invalid bins are provided, bins will be generated automatically based on the minimum and maximum wavenumber and the number of cells in each dimension.
+        remove_nan : bool (optional)
+            Whether to remove NaN values from the binned power spectrum (need to keep if calculating the ratio between two power spectra). Defaults to True.
+        color : str (optional)
+            The desired color of the plot. Defaults to "tab:blue".
+        linestyle : str (optional)
+            The desired linestyle of the plot. Defaults to "-".
+        title : str (optional)
+            The title of the output plot. Defaults to "Clustering power spectrum".
+        save_loc : str (optional)
+            The path to the save location of the output plot. Defaults to clustering_ps.png in the working directory.
+        save_fig : bool (optional)
+            Whether or not to automatically save the plot. Defaults to True.
+
+        Returns
+        -------
+        new_k : NDarray
+            The wavenumbers corresponding to the power spectrum.
+        plot1 : NDarray
+            The power spectrum of the selected field.
+        error1 : NDarray
+            The error in each bin of the power spectrum.
+
+        Example usage
+        -------------
+        >>> from postEoR import generation as gen
+        >>> box = gen.generate_box(z=4)
+        >>> k, ps, err = box.get_clustering_ps(field="BT", linestyle="--", save_fig=False)
+        """
+        if field == "BT":
+            x = self.BT_field
+        elif field == "dens":
+            x = self.density_field
+        elif field == "halo":
+            x = self.halo_field
+        else:
+            print("Invalid field entered. Defaulting to brightness temperature. \n Valid field options are \"BT\", \"dens\", and \"halo\".")
+            x = self.BT_field
+        
+        y = x.copy()
+        y[y>0] = 1
+        y[y<0] = 0
+        y /= np.mean(y)
+
+        k, ps, err = get_PS(y, self.box_len, self.HII_dim, kbins, remove_nan)
+
+        if save_fig:
+            if clear_prev_plot:
+                plt.clf() # clearing any previous plots
+            plt.rcParams['figure.figsize'] = [9, 6]
+            plt.plot(k, ps, color=str(color), label="z = " + str(self.z) + ", " + str(field), linestyle=str(linestyle))
+
+            plt.yscale("log")
+            plt.xscale("log")
+            plt.ylabel("P(k), (mK)$^2$)")
+            plt.xlabel("k, (Mpc)$^{-1}$)")
+            plt.legend()
+            plt.title(title)
+
+            plt.savefig(str(save_loc))
+
+        return k, ps, err
 
 
 
