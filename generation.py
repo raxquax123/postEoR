@@ -23,7 +23,6 @@ def generate_box(
     HII_dim=256, 
     box_len=64,
     overdens_cap=1.686,
-    use_watershed=False,
 ) -> Box:
     """
     Generates a coeval box at specified redshift using the base functionality of 21cmFAST and post-processing functions in tools.py.
@@ -38,8 +37,6 @@ def generate_box(
         The size of the box in Mpc.
     overdens_cap : float (optional)
         The minimum overdensity required for a cell to be considered part of a halo. Defaults to 1.686 (Press-Schechter critical overdensity for collapse).
-    use_watershed : bool (optional)
-        Whether to use a watershed-based method for finding the halos. Defaults to False.
 
     Returns
     -------
@@ -67,10 +64,7 @@ def generate_box(
     )
     ionized_field = p21c.ionize_box(perturbed_field = perturbed_field) # export neutral fraction from 21cmFAST (EoR bubbles)
     dens = getattr(perturbed_field, "density") # export overdensity field for use in post-processing
-    if use_watershed:
-        halos = tools.find_halos_watershed(dens, box_len, HII_dim, overdens_cap=overdens_cap)
-    else:
-        halos = tools.find_halos(dens, box_len, HII_dim, overdens_cap=overdens_cap) # obtain halo distribution and masses from the overdensity field by pushing overdensities to their local maxima
+    halos = tools.find_halos_watershed(dens, box_len, HII_dim, overdens_cap=overdens_cap)
     HI_distr = tools.get_HI_field(halos, z, box_len, HII_dim) # obtain the neutral hydrogen distribution, given a halo field and the redshift of evaluation
 
     H_0 = hlittle * 100
@@ -91,7 +85,6 @@ def generate_cone(
     HII_dim=200, 
     box_len=400,
     overdens_cap=1.686,
-    use_watershed=False,
 ) -> Ltcone: 
     """
     Generates a lightcone using the base functionality of 21cmFAST and post-processing functions in tools.py.
@@ -108,8 +101,6 @@ def generate_cone(
         The length in Mpc of each spatial dimension of the lightcone. Defaults to 400.
     overdens_cap : float
         The minimum overdensity required for a cell to be considered part of a halo. Defaults to 1.686 (Press-Schechter critical overdensity for collapse).
-    use_watershed : bool (optional)
-        Whether to use a watershed-based method for finding the halos. Defaults to False.
 
     Returns
     -------
@@ -152,10 +143,8 @@ def generate_cone(
     BT_EoR_ltcone = getattr(lightcone, "brightness_temp") # getting the bt from the pre-reionization neutral igm
     dens_ltcone = getattr(lightcone, "density") # getting density for post-processing
 
-    if use_watershed:
-        halos_ltcone = tools.find_halos_watershed(dens_ltcone, box_len, HII_dim, overdens_cap=overdens_cap)
-    else:
-        halos_ltcone = tools.find_halos(dens_ltcone, box_len, HII_dim, overdens_cap=overdens_cap) # find the halos on the lightcone.
+    halos_ltcone = tools.find_halos_watershed(dens_ltcone, box_len, HII_dim, overdens_cap=overdens_cap)
+
     redshift = (min_redshift+max_redshift) / 2 # taking the mean redshift of the lightcone to use in evaluating the BT
     HI_ltcone = tools.get_HI_field(halos_ltcone, redshift, box_len, HII_dim, no_bins=25, max_rad=5) # find the hi field on the lightcone
 

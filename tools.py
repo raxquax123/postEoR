@@ -28,49 +28,6 @@ G = 6.67430e-11 # gravitational constant, in N m^2 / kg^2
 hydrogen_baryon_frac = 0.75
 
 
-def push_mass_to_halo(x):
-    """
-    Moves the masses to their local maxima by calculating the gradient of the mass field and determining how much mass is entering and leaving each cell.
-
-    Parameters
-    ----------
-    x : NDarray
-        The mass field, calculated from the overdensity field produced by 21cmFAST. Units of solar masses.
-
-    Returns
-    -------
-    new_field : NDarray
-        The intermediate mass/halo field produced after this iteration.
-    """
-    # calculating the gradient, and setting the edge values to zero (to remove edge effects).
-    grad_full = np.gradient(x)
-    grad = np.zeros(np.shape(grad_full))
-    grad[0][1:-1, 1:-1, 1:-1] = grad_full[0][1:-1, 1:-1, 1:-1]
-    grad[1][1:-1, 1:-1, 1:-1] = grad_full[1][1:-1, 1:-1, 1:-1]
-    grad[2][1:-1, 1:-1, 1:-1] = grad_full[2][1:-1, 1:-1, 1:-1]
-
-    # contributions from 6 nearest neighbours
-    field_change = - np.roll(grad[0], [-1, 0, 0], axis=(0, 1, 2)) + np.roll(grad[0], [1, 0, 0], axis=(0, 1, 2)) - np.roll(grad[1], [0, -1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [0, 1, 0], axis=(0, 1, 2)) - np.roll(grad[2], [0, 0, -1], axis=(0, 1, 2)) + np.roll(grad[2], [0, 0, 1], axis=(0, 1, 2))
-
-    # contributions from 10 second nearest neighbours
-    field_change += 0.5*(np.roll(grad[0], [1, 1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [1, 1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [0, 1, 1], axis=(0, 1, 2)) + np.roll(grad[2], [0, 1, 1], axis=(0, 1, 2)) + np.roll(grad[0], [1, 0, 1], axis=(0, 1, 2)) + np.roll(grad[2], [1, 0, 1], axis=(0, 1, 2)))
-    field_change += 0.5*(- np.roll(grad[0], [-1, 1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [-1, 1, 0], axis=(0, 1, 2)) - np.roll(grad[1], [0, -1, 1], axis=(0, 1, 2)) + np.roll(grad[2], [0, -1, 1], axis=(0, 1, 2)) + np.roll(grad[0], [1, 0, -1], axis=(0, 1, 2)) - np.roll(grad[2], [1, 0, -1], axis=(0, 1, 2)))
-    field_change += 0.5*(np.roll(grad[0], [1, -1, 0], axis=(0, 1, 2)) - np.roll(grad[1], [1, -1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [0, 1, -1], axis=(0, 1, 2)) - np.roll(grad[2], [0, 1, -1], axis=(0, 1, 2)) - np.roll(grad[0], [-1, 0, 1], axis=(0, 1, 2)) + np.roll(grad[2], [-1, 0, 1], axis=(0, 1, 2)))
-    field_change -= 0.5*(np.roll(grad[0], [-1, -1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [-1, -1, 0], axis=(0, 1, 2)) + np.roll(grad[1], [0, -1, -1], axis=(0, 1, 2)) + np.roll(grad[2], [0, -1, -1], axis=(0, 1, 2)) + np.roll(grad[0], [-1, 0, -1], axis=(0, 1, 2)) + np.roll(grad[2], [-1, 0, -1], axis=(0, 1, 2)))
-
-    # contributions from 8 third nearest neighbours
-    field_change += 1 / 3 * (np.roll(grad[0], [1, 1, 1], axis=(0, 1, 2)) + np.roll(grad[1], [1, 1, 1], axis=(0, 1, 2)) + np.roll(grad[2], [1, 1, 1], axis=(0, 1, 2)))
-    field_change += 1 / 3 * (-np.roll(grad[0], [-1, 1, 1]) + np.roll(grad[1], [-1, 1, 1]) + np.roll(grad[2], [-1, 1, 1]) + np.roll(grad[0], [1, -1, 1]) - np.roll(grad[1], [1, -1, 1]) + np.roll(grad[2], [1, -1, 1]) + np.roll(grad[0], [1, 1, -1]) + np.roll(grad[1], [1, 1, -1]) - np.roll(grad[2], [1, 1, -1]))
-    field_change += 1 / 3 * (-np.roll(grad[0], [-1, -1, 1], axis=(0, 1, 2)) + -np.roll(grad[1], [-1, -1, 1], axis=(0, 1, 2)) + np.roll(grad[2], [-1, -1, 1], axis=(0, 1, 2)) + np.roll(grad[0], [1, -1, -1], axis=(0, 1, 2)) - np.roll(grad[1], [1, -1, -1], axis=(0, 1, 2)) - np.roll(grad[2], [1, -1, -1], axis=(0, 1, 2)) - np.roll(grad[0], [-1, 1, -1], axis=(0, 1, 2)) + np.roll(grad[1], [-1, 1, -1], axis=(0, 1, 2)) - np.roll(grad[2], [-1, 1, -1], axis=(0, 1, 2)))
-    field_change -= 1 / 3 * (np.roll(grad[0], [-1, -1, -1], axis=(0, 1, 2)) + np.roll(grad[1], [-1, -1, -1], axis=(0, 1, 2)) + np.roll(grad[2], [-1, -1, -1], axis=(0, 1, 2)))
-
-    new_field = x + field_change
-    new_field[new_field < 10**7] = 0 # removing negative mass values and non-halo density maxima
-    new_field = np.sum(x) / np.sum(new_field) * new_field # normalising to original field to account for mass gain by removing negative masses
-
-    return new_field
-
-
 def get_delta_vir(z): 
     """
     Calculates the mean halo overdensity within the virial radius at a given redshift.
@@ -160,59 +117,6 @@ def get_conc(M, z): # returns halo concentration (dimensionless)
     conc = c_HI * (M/10**11)**(-0.109) * 4 / (1+z)**gamma 
 
     return conc
-
-
-def find_halos(overdensity_field, box_len, HII_dim, max_count=200, overdens_cap=0, sanity_check=False): 
-    """
-    Returns mass and centre position of halos in solar masses. 
-    Stops at either no change after algorithm applied, or when maximum number of iterations has been reached.
-
-    Parameters
-    ----------
-    overdensity_field : NDarray
-        The overdensity field on which the halos are to be found.
-    box_len : float
-        The physical length of each of the spatial dimensions of the box / cone, in Mpc. 
-    HII_dim : int
-        The number of cells in each of the spatial dimensions of the box / cone.
-    max_count : int (optional)
-        The maximum number of times the halo finder will iterate over the input field. Defaults to 200.
-    overdens_cap : float (optional)
-        The minimum overdensity for which a cell is considered to be associated with a halo. Defaults to 0.
-    sanity_check : bool (optional)
-        Whether to print the total mass moved after each iteration, for bug testing. Defaults to False.
-
-    Returns 
-    -------
-    halo_field : NDarray
-        The distribution of halo masses across the field, in solar masses.
-    """
-    H_0_std_units = (hlittle * 100 * 1000) / (Mpc_to_m)
-    z_comov = 0
-    H = H_0_std_units * (OMm*(1+z_comov)**3 + OMl) ** 0.5
-    crit_M_dens = (3 * H ** 2) / (8 * np.pi * G) * (OMm * (1+z_comov)**3) / (OMm*(1+z_comov)**3 + OMl) # using the critical density at a set redshift as the simulation is comoving.
-
-    new_overdensity_field = overdensity_field.copy()
-    mass_field = (1 + new_overdensity_field) * crit_M_dens * (box_len / HII_dim * Mpc_to_m)**3 / (solar_mass) * (1 / (1 + np.mean(overdensity_field))) # converting to solar masses (critical density at z = 3 since comoving box) CHECK
-
-    mass_field[overdensity_field < overdens_cap] = 0 # removing underdense regions
-    halo_field = push_mass_to_halo(mass_field)
-    count = 0
-    match = 10 # initialising check as arbitrary non-zero number
-
-    while count <= max_count - 1 and match >= 1:
-        old_field = halo_field.copy()
-        halo_field = push_mass_to_halo(old_field) # algorithm to push masses to central maxima
-        old_field = halo_field.copy()
-        old_field = old_field[::-1, ::-1, ::-1]
-        halo_field = push_mass_to_halo(old_field)
-        halo_field = halo_field[::-1, ::-1, ::-1]
-        count += 1
-        match = np.sum(abs(halo_field - old_field))
-        if sanity_check:
-            print("change after iteration: ", match,". iteration number", count) # sanity check - expect to decrease with each iteration.
-
-    return halo_field
 
 
 def get_rho_0(M, z): # calculates the rho_0 constant for a given modified NFW profile
