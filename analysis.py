@@ -6,7 +6,6 @@ from scipy.integrate import quad
 import py21cmfast as p21c
 import postEoR.tools as tools
 from postEoR.tools import hlittle, OMm, OMl
-from postEoR.objects import Box, Ltcone
 import matplotlib.pyplot as plt
 plt.rcParams.update({'font.size': 15})
 
@@ -279,7 +278,7 @@ def flatten(x, axis): # takes all the values along a given axis and sums them (e
     return flat
 
 
-def reduce_res(reduction_factor, object: Box | Ltcone):
+def reduce_res(reduction_factor, object):
     # changing resolution of brightness temperature
     dx, dy = object.cell_size, object.cell_size 
     y1_new, x1_new = np.mgrid[slice(dy * reduction_factor / 2, object.box_len, dy*reduction_factor), slice(dx*reduction_factor/ 2, object.box_len, dx*reduction_factor)]

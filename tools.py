@@ -306,13 +306,16 @@ def create_spherical_profile(halo, z, box_len, HII_dim, max_rad=1):
                 dist_from_cent_j = abs(centre_ind - j)
                 dist_from_cent_k = abs(centre_ind - k)
                 count_at_dist = ((dist_from_cent_i+1)**3+(dist_from_cent_j+1)**3+(dist_from_cent_k+1)**3)/3 # calculating how many 'similar' cells there are, to distribute shell mass amongst them
-                sph_prof[i, j, k] = (obtain_HI_at_dist(halo, z, r_set[dist_from_cent_i + 1], r_set[dist_from_cent_i]) + obtain_HI_at_dist(halo, z, r_set[dist_from_cent_j+1], r_set[dist_from_cent_j])+ obtain_HI_at_dist(halo, z, r_set[dist_from_cent_k+1], r_set[dist_from_cent_k])) / (3 * count_at_dist)
+                #sph_prof[i, j, k] = (obtain_HI_at_dist(halo, z, r_set[dist_from_cent_i + 1], r_set[dist_from_cent_i])**2 + obtain_HI_at_dist(halo, z, r_set[dist_from_cent_j+1], r_set[dist_from_cent_j])**2 + obtain_HI_at_dist(halo, z, r_set[dist_from_cent_k+1], r_set[dist_from_cent_k])**2)**0.5 / (3 * count_at_dist)
+                r_max = (r_set[dist_from_cent_i + 1]**2+r_set[dist_from_cent_j + 1]**2+r_set[dist_from_cent_k + 1]**2)**0.5
+                r_min = (r_set[dist_from_cent_i]**2+r_set[dist_from_cent_j]**2+r_set[dist_from_cent_k]**2)**0.5
+                sph_prof[i, j, k] = obtain_HI_at_dist(halo, z, r_max, r_min) / count_at_dist
     sph_prof_fin = sph_prof * hi_from_halos_2(halo, z) / np.sum(sph_prof)
 
     return sph_prof_fin
 
 
-def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0, connectivity=1, compactness=0):
+def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0, connectivity=1, compactness=0, normalise=True):
     """
     Returns mass and centre position of halos in solar masses. 
     Stops at either no change after algorithm applied, or when maximum number of iterations has been reached.
@@ -331,7 +334,7 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0, connectivity=1,
     Returns 
     -------
     halo_field : NDarray
-        The distribution of halo masses across the field, in solar masses.
+        The distribution of halo masses across the field, in solar masses / h.
     """
     image = dens.copy()
     image[dens < overdens_cap] = 0
@@ -340,7 +343,7 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0, connectivity=1,
     print(np.max(labels)) # prints total number of halos, to keep track of mass allocation progress
     dims = np.shape(dens)
 
-    halo_field = np.zeros([dims[0], dims[1], dims[2]])
+    halo_field = np.zeros([dims[0], dims[1], dims[2]], dtype=np.float64)
 
     H_0_std_units = (hlittle * 100 * 1000) / (Mpc_to_m)
     z_comov = 0
@@ -348,6 +351,8 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0, connectivity=1,
     crit_M_dens = (3 * H ** 2) / (8 * np.pi * G) * (OMm * (1+z_comov)**3) / (OMm * (1+z_comov)**3 + OMl) # using the critical density at a set redshift as the simulation is comoving.
 
     new_overdensity_field = dens.copy()
+    new_overdensity_field = new_overdensity_field.astype(np.float64)
+    print("new!")
     mass_field = (1 + new_overdensity_field) * crit_M_dens * (box_len / HII_dim * Mpc_to_m)**3 / (solar_mass) * (1 / (1 + np.mean(dens))) 
 
     mass_field[dens < overdens_cap] = 0 # removing underdense regions
@@ -358,6 +363,12 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0, connectivity=1,
         halo_mass = np.sum(current_halo)
         halo_field[halo_centre] += halo_mass
         print(int(i+1), end="\r")
+
+    if normalise:
+        halo_field *= (overdens_cap+1)
+        bl_halos = (crit_M_dens * (box_len * Mpc_to_m)**3 / hlittle**2) / solar_mass # baseline total mass - to add mass that has been removed from small halos to larger halos. division by h^2 is to account for the H^2 in calculating the critical mass density.
+        if np.sum(halo_field) >= bl_halos:
+            halo_field *= bl_halos / np.sum(halo_field) # normalise total mass to the baseline mass
 
     halo_field[halo_field < 10**7] = 0 # removing small mass regions that are unlikely to be halos
     

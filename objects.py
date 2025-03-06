@@ -297,7 +297,7 @@ class Base(ABC):
         >>> box = gen.generate_box(z=4)
         >>> k, ps, err = box.get_dimless_ps(field="BT", linestyle="--", save_fig=False)
         """
-        new_k, plot1, error1 = self.get_ps(save_fig=False, kbins=kbins, remove_nan=remove_nan)
+        new_k, plot1, error1 = self.get_PS(save_fig=False, kbins=kbins, remove_nan=remove_nan)
         
         plot1 *= new_k**3 / (2 * np.pi**2) 
         error1 *= new_k**3 / (2 * np.pi**2) 
@@ -538,13 +538,13 @@ class Ltcone(Base):
     z_end : float
         The minimum redshift of the lightcone.
     box_len : float
-        The length in Mpc of the lightcone along its spatial dimensions.
+        The length in Mpc / h of the lightcone along its spatial dimensions.
     HII_dim : float
         The number of cells along the spatial dimensions of the lightcone.
     density_field : NDarray
         The overdensity field of the lightcone, calculated using 21cmFAST. Dimensionless.
     halo_field: NDarray
-        The halo field of the lightcone, in solar masses.
+        The halo field of the lightcone, in solar masses / h.
     BT_field : NDarray
         The brightness temperature field of the lightcone, in mK.
     Lightconer : Lightconer object
@@ -778,13 +778,13 @@ class Box(Base):
     z : float
         The redshift of the box.
     box_len : float
-        The length in Mpc of the box dimensions.
+        The length in Mpc / h of the box dimensions.
     HII_dim : float
         The number of cells along the box dimensions.
     density_field : NDarray
         The overdensity field of the coeval box, calculated using 21cmFAST. Dimensionless.
     halo_field: NDarray
-        The halo field of the coeval box, in solar masses.
+        The halo field of the coeval box, in solar masses / h.
     BT_field : NDarray
         The brightness temperature field of the coeval box, in mK.
         """

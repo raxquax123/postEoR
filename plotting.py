@@ -157,8 +157,8 @@ def plot_mfs(counts,
     plt.title(title)
     plt.yscale("log")
     plt.xscale("log")
-    plt.ylabel('$\dfrac{dn}{d\log M}$ (Mpc$^{-3}$)')
-    plt.xlabel('M (M$_{\odot}$)')
+    plt.ylabel('$\dfrac{dn}{d\log M}$ ((h/Mpc)$^3$)')
+    plt.xlabel('M (h$^{-1}$M$_{\odot}$)')
 
     plt.savefig(str(save_loc))
 
@@ -202,8 +202,8 @@ def plot_ps(ps,
 
     ax.set_yscale("log")
     ax.set_xscale("log")
-    ax.set_ylabel("P(k), (mK)$^2$)")
-    ax.set_xlabel("k, (Mpc)$^{-1}$)")
+    ax.set_ylabel("P(k), (mK)$^2$(h/Mpc)$^3$")
+    ax.set_xlabel("k, (h/Mpc)$^{-1}$")
     ax.legend()
     ax.set_title(title)
 

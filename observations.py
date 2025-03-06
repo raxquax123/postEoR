@@ -2,13 +2,20 @@
 
 import numpy as np
 from postEoR.tools import nu_21, h, k_B, T_CMB, c, hlittle, OMm, OMl, Mpc_to_m
-from postEoR.analysis import get_distance, get_PS
+from postEoR.analysis import get_distance
 from abc import ABC, ABCMeta
-from scipy.stats import norm, binned_statistic
+from scipy.stats import binned_statistic
 T_408 = 20
 lambda_21 = 0.21
 from astropy.cosmology import Planck18
 from postEoR.objects import Box, Ltcone
+from ska_ost_array_config.simulation_utils import simulate_observation
+from astropy.coordinates import SkyCoord
+from astropy import units
+from astropy.time import Time
+import ska_ost_array_config.UVW as UVW
+from ska_ost_array_config.array_config import LowSubArray
+
 
 
 def get_T_sys1(z, T_spl, T_atm):
@@ -101,6 +108,7 @@ def get_sigma_noise(T_sys, A_eff, bw, time_res):
     """
     Calculate the standard deviation in the observed signal due to noise. 
     Formula from "Towards optimal foreground mitigation strategies for interferometric HI intensity mapping in the low redshift universe" (Chen et al. 2023)
+    Uses the 'radiometer equation'
 
     Parameters
     ----------
@@ -225,18 +233,19 @@ def get_survey_volume(z_max, z_min, f_sky=0.0024):
 Below are modified versions of Laura's code, edited to be specific to SKA-LOW.
 """
 
+
+
 class Telescope(ABC):
     """
     The base telescope class, upon which we may build the various stages of SKA-LOW. Cannot be directly instantiated.
     """
     def __init__(self):
-        self.aeffdish = get_A_eff(self.z_med, np.pi * (self.ddish / 2.)**2) # Total effective collecting area m^2 
-        self.fwhm21cm = 1.220 * lambda_21 / self.ddish # fwhm at 21cm [sr]
-        self.fov21cm = self.fwhm21cm**2 * self.nbeam # Field-of-view [sr] 
-    
+        self.fwhm21cm = 1.220 * lambda_21 / self.ddish # fwhm at 21cm in radians
+        self.fov21cm = self.fwhm21cm**2 * self.nbeam # Field-of-view in steradians
+
     def fwhm_at_z(self, z): 
         """
-        Calculate the FWHM of the telescope at a given observation redshift, in radians.
+        Calculate the FWHM of a single beam of the telescope at a given observation redshift, in radians.
 
         Parameters
         ----------
@@ -245,9 +254,10 @@ class Telescope(ABC):
         """
         return 1.220 * (1.+z) * (c / nu_21) / (0.8 * self.ddish)
     
+
     def fov_at_z(self, z):
         """
-        Calculate the field of view of the telescope at a given redshift z, in steradians.
+        Calculate the field of view of the telescope at a given redshift z for a single beam, in steradians.
 
         Parameters
         ----------
@@ -256,6 +266,7 @@ class Telescope(ABC):
         """
         return self.fwhm_at_z(z)**2 
     
+
     def z_to_f(self, z):
         """
         Determines the frequency of the 21 cm line at a given redshift z.
@@ -268,19 +279,89 @@ class Telescope(ABC):
         return nu_21 / (1. + z)
 
 
+
 class SKA1LOW_AAstar(Telescope):
     """
     Instantiating the SKA-LOW telescope for the AA* stage.
     """
-    def __init__(self):
+    def __init__(self, T_spl):
         self.maxB = 73.4 # Maximum Baseline in km
-        self.z_med = (self.z_min + self.z_max) / 2
-        self.aeff = get_A_eff(self.z_med, 419000) # Total effective collecting area [m^2]
+        self.area = 419000 * 307/512 # Total effective collecting area [m^2] CHECK
         self.ddish = 35. # diameter of a station, in m
-        self.nbeam = 1. # number of beams
-        self.npol = 2. # number of polarisations
+        self.nbeam = 1 # number of beams
+        self.npol = 2 # number of polarisations
         self.ndish = 307. # number of stations
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
+        self.T_spl = T_spl
+        self.stage = "AA*"
+
+
+
+class SKA1LOW_AA4(Telescope):
+    """
+    Instantiating the SKA-LOW telescope for the A4 stage.
+    """
+    def __init__(self, T_spl):
+        self.maxB = 73.4 # Maximum Baseline in km
+        self.area = 419000 # Total effective collecting area [m^2]
+        self.ddish = 35. # diameter of a station, in m
+        self.nbeam = 1 # number of beams
+        self.npol = 2 # number of polarisations
+        self.ndish = 512. # number of stations
+        self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
+        self.T_spl = T_spl
+        self.stage = "AA4"
+
+
+
+class SKA1LOW_AA05(Telescope):
+    """
+    Instantiating the SKA-LOW telescope for the AA0.5 stage.
+    """
+    def __init__(self, T_spl):
+        self.maxB = 73.4 # Maximum Baseline in km
+        self.ddish = 35. # diameter of a station, in m
+        self.nbeam = 1 # number of beams
+        self.npol = 2 # number of polarisations
+        self.ndish = 4. # number of stations
+        self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
+        self.T_spl = T_spl
+        self.stage = "AA0.5"
+
+
+
+class SKA1LOW_AA2(Telescope):
+    """
+    Instantiating the SKA-LOW telescope for the AA2 stage.
+    """
+    def __init__(self, T_spl):
+        self.maxB = 39.0 # Maximum Baseline in km
+        self.area = 419000 * 64/512 # Total effective collecting area [m^2] CHECK
+        self.ddish = 35. # diameter of a station, in m
+        self.nbeam = 1 # number of beams
+        self.npol = 2 # number of polarisations
+        self.ndish = 64. # number of stations
+        self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
+        self.T_spl = T_spl
+        self.stage = "AA2"
+
+
+
+class SKA1LOW_AA1(Telescope):
+    """
+    Instantiating the SKA-LOW telescope for the AA1 stage.
+    """
+    def __init__(self, T_spl):
+        self.maxB = 73.4 # Maximum Baseline in km
+        self.area = 419000 * 16/512 # Total collecting area [m^2] CHECK
+        self.ddish = 35. # diameter of a station, in m
+        self.nbeam = 1 # number of beams
+        self.npol = 2 # number of polarisations
+        self.ndish = 16. # number of stations
+        self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
+        self.T_spl = T_spl
+        self.stage = "AA1"
+
 
 
 class Survey(Telescope):
@@ -298,18 +379,21 @@ class Survey(Telescope):
         self.Telescope = Telescope
         self.z_med = (self.z_min + self.z_max) / 2. # Median redshift
         
-        self.asurv *= (np.pi/180.)**2 # Survey area in sr
-        self.fov_at_zmed = self.Telescope.fov_at_z(self.z_med)
+        self.asurv = self.asurv * (np.pi/180.)**2 # Survey area in sr
 
-        self.npt = self.asurv / self.fov_at_zmed # Number of pointings
+        self.npt = self.asurv / Telescope.fov_at_z(self.z_med) # Number of pointings
         self.tint = (self.tsurv*3600.) / self.npt # Integration time per pointing
         
-        self.T_sys = get_T_sys1(self.z_med, self.T_spl, self.T_atm) + T_CMB + get_T_rcv(self.z_med) # in K
+        self.T_sys = get_T_sys1(self.z_med, Telescope.T_spl, self.T_atm) + T_CMB + get_T_rcv(self.z_med) # in K
         
-        self.nk = 50 # number of k bins
+        self.nk = 20 # number of k bins
+
+        self.aeffdish = get_A_eff(self.z_med, np.pi * (Telescope.ddish / 2.)**2) # Effective collecting area per station in m^2 
+
+        self.aeff = get_A_eff(self.z_med, Telescope.area) # Total effective collecting area [m^2] CHECK
 
 
-    def volelement(self, z=None):
+    def volelement(self, z=None): # tested
         """
         Calculates the comoving volume of one element per pointing, i.e. volume per FoV and frequency channel.
 
@@ -322,12 +406,12 @@ class Survey(Telescope):
             z = self.z_med
         r = get_distance(z) * hlittle # in Mpc/h
         H_z = (hlittle * 100 * 1000 * (OMm * (1+z)**3 + OMl)**0.5) / Mpc_to_m # in s^-1
-        y = c * 1e-3 * (1.+z)**2 / (H_z * nu_21) # in m s
+        y = c * 1e-3 * (1.+z)**2 / (H_z * nu_21) / Mpc_to_m # in Mpc s
         
         return r**2 * y  * self.Telescope.fov_at_z(z) * self.Telescope.dnu
 
 
-    def volsurvey(self):
+    def volsurvey(self): # tested
         """
         Computes the comoving volume of the survey in (Mpc/h)^3.
 
@@ -336,25 +420,12 @@ class Survey(Telescope):
         vol : float
             The comoving volume of the survey, in (Mpc/h)^3.
         """
-        vol = get_survey_volume(self.zmax, self.zmin) * (self.asurv / (4. * np.pi)) * hlittle**3 
+        vol = get_survey_volume(self.z_max, self.z_min) * hlittle**3 
         
         return vol
 
 
-    def karr(self):
-        """
-        Outputs an array of wavenumbers, alongside their logarithmic separation.
-
-        Returns
-        -------
-        """
-        dk = (np.log10(self.kmax) - np.log10(self.kmin)) / self.nk
-        karr = np.logspace(np.log10(self.kmin), np.log10(self.kmax), self.nk)
-
-        return karr, dk
-
-
-    def pk_gal(self, Ngal, bgal, field: Box | Ltcone):
+    def pk_gal(self, Ngal, bgal, field: Box | Ltcone): # tested
         """
         Generates the theoretical galaxy power spectrum, alongside the galaxy shot noise and the total noise contribution from galaxies.
 
@@ -369,26 +440,43 @@ class Survey(Telescope):
 
         Returns
         -------
-
+        karr : NDarray
+            An array of wavenumbers, in h Mpc^-1.
+        popt : NDarray
+            The theoretical galaxy power spectrum.
+        pshotgal : float
+            The galaxy shot noise.
+        sigma_cross : NDarray
+            The total power contribution from galaxies to the observed power spectrum.
         """
-        karr, dk = self.karr()
-        
-        _, pcosmo, _ = get_PS(field.density_field, field.box_len, field.HII_dim)
-        
+        if isinstance(self, Interferometer):
+            karr = self.karr()
+        else:
+            karr = field.gen_k_bins()
+
+        _, pcosmo, _ = field.get_PS(field="dens", kbins=karr, save_fig=False, remove_nan=False)
+
         popt = bgal**2 * pcosmo
         
         pshotgal = 1. / (Ngal / self.volsurvey())
         
-        rhok = self.volsurvey() / ((2. * np.pi)**3)
+        sigma_cross = np.sqrt((popt**2+pshotgal**2)) 
+
+        if isinstance(self, Interferometer):
+            rhok = self.volsurvey() / ((2. * np.pi)**3)
+            volk = 0.5 * (4. / 3.) * np.pi * ((karr[1:])**3 - (karr[:-1])**3) # Number of Fourier modes in this bin
+            nummod = rhok * volk
+            sigma_cross /= 2 * nummod
+
+        k = (karr[1:] + karr[:-1]) / 2
+
+        k = k[:np.size(sigma_cross)]
+
+        k = k[~np.isnan(sigma_cross)]
+        popt = popt[~np.isnan(sigma_cross)]
+        sigma_cross = sigma_cross[~np.isnan(sigma_cross)]
         
-        # Number of Fourier modes in this bin
-        volk = 0.5 * (4. / 3.) * np.pi * ((karr[:]+dk)**3 - (karr[:]-dk)**3)
-        
-        nummod = rhok * volk
-        
-        sigma_cross = np.sqrt((popt**2+pshotgal**2) / (2. * nummod))
-        
-        return karr, popt, pshotgal, sigma_cross
+        return k, popt, pshotgal, sigma_cross
 
 
     def fisher_pkshotnoise(self, pkm, pkcrosserr):
@@ -398,6 +486,7 @@ class Survey(Telescope):
         Parameters
         ----------
         pkm : NDarray
+
         pkcrosserr : NDarray
 
         Returns
@@ -416,6 +505,7 @@ class Survey(Telescope):
         return pkshoterr
 
 
+
 class Interferometer(Survey):
     """
     The interferometer class, which can be instantiated to reflect the properties of a given observation.
@@ -424,13 +514,27 @@ class Interferometer(Survey):
     ----------
     Telescope : class Telescope
         The telescope object with which the survey is carried out.
-    visfile : str
-        The path to the visibility file.
+    z_max : float
+        The maximum redshift of the survey.
+    z_min : float
+        The minimum redshift of the survey.
+    asurv : float
+        The survey area, in square degrees.
+    tsurv : float
+        The total collecting time of the survey, in hours.
+    T_atm : float
+        The atmospheric temperature contribution to the system temperature, in Kelvins.
     """
-    def __init__(self, Telescope, visfile):
+    def __init__(self, Telescope, z_max, z_min, asurv, tsurv, T_atm):
+        self.asurv = asurv
+        self.tsurv = tsurv # tsurv is in hours
+        self.T_atm = T_atm
+        self.z_max = z_max
+        self.z_min = z_min
         Survey.__init__(self, Telescope)
-        self.read_vis(visfile)
+        self.gen_nvis(Telescope)
         self.kperparr = self.kperp_at_z(self.z_med)
+        self.Telescope = Telescope
         
         # Set min and max k modes via the visibility coverage 
         kmin1 = self.kperparr[0]
@@ -442,23 +546,69 @@ class Interferometer(Survey):
         self.kmax = self.kperparr[-1]
 
 
-    def read_vis(self, visfile): 
+    def gen_nvis(self, Telescope):
         """
-        Reads in a visibility file (stored as a text file), and returns the normalised visibility values.
-        Sets u, n(u) at z=0, lambda=0.21.
+        Generates the baseline number density for a given interferometric array, and assigns it and the baselines to the object.
 
         Parameters
         ----------
-        visfile : str
-            The path to the visibility file.
+        Telescope : Telescope object
+            The telescope array whose n(u) is to be calculated.
         """
-        vis = np.loadtxt(visfile)
-        self.u = vis[:,0] / lambda_21 # extracts the u coordinate
-        self.nvis = vis[:,1] # extracts the visibility value
-        self.du = self.u[1] - self.u[0]
+        # Target coordinate - Polaris Australis
+        phase_centre = SkyCoord("21:08:46.8 -88:57:23.4", unit=(units.hourangle, units.deg))
+
+        # Start time of the observation
+        start_time = Time("2024-09-25T03:23:21.6", format='isot', scale='utc')
+
+        observation = simulate_observation(
+            array_config=LowSubArray(subarray_type=Telescope.stage).array_config,
+            phase_centre=phase_centre,
+            start_time=start_time,
+            duration=5000,
+            integration_time=500,
+            ref_freq=280e6,
+            chan_width=1e6,
+            n_chan=1,
+            horizon=0,
+        )
+
+        uvw = UVW.UVW(observation, ignore_autocorr=False)
+
+        u_vals = (uvw.u_wave**2 + uvw.v_wave**2)**0.5
+
+        bins = np.linspace(0, 2000, 101)
+
+        counts, _ = np.histogram(u_vals, bins)
+
+        self.u = (bins[1:] + bins[:-1]) / 2
+
+        self.nvis = counts.astype(float)
+
+        self.du = self.u[1] - self.u[0] # bins linearly spaced, so du is does not vary with u
+
+        self.nvis /= self.du * self.u * 2 * np.pi
+
+        sumn = 2. * np.pi * self.du * sum(self.nvis * self.u) # numerical approximation to the half plane integral
+        #sumn = 2. * np.pi * sum(self.nvis)
+        self.nvis *= (0.5 * Telescope.ndish * (Telescope.ndish-1.)) / sumn # this normalises the half plane integral to the total number of baseline pairs
+
+
+    def karr(self):
+        """
+        Generates an array of wavenumbers based on the maximum and minimum wavenumbers present in the array.
+
+        Returns
+        -------
+        karr : NDarray
+            The wavenumber array, in h Mpc^-1.
+        dk : float
+            The logarithmic spacing of the wavenumbers in the array, in h Mpc^-1.
+        """
+        dk = (np.log10(self.kmax)-np.log10(self.kmin)) / self.nk
+        karr = np.logspace(np.log10(self.kmin), np.log10(self.kmax), self.nk)
         
-        sumn = 2. * np.pi * self.du * sum(self.nvis * self.u)
-        self.nvis *= (0.5 * self.Telescope.ndish * (self.Telescope.ndish-1.)) / sumn
+        return karr, dk
 
 
     def renorm_vis(self, z=None): 
@@ -469,6 +619,15 @@ class Interferometer(Survey):
         ----------
         z : float (optional)
             The redshift of the observation. Defaults to None. 
+
+        Returns
+        -------
+        u_at_z : NDarray
+            The renormalised u coordinate distribution.
+        nvis_at_z : NDarray
+
+        du_at_z : float
+            The u coordinate separation.
         """
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
@@ -487,6 +646,11 @@ class Interferometer(Survey):
         ----------
         z : float (optional)
             The redshift of the observation. Defaults to None. 
+
+        Returns
+        -------
+        kperpatz : NDarray
+            An array of the perpendicular k values for the given array layout, in h Mpc^-1.
         """
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
@@ -509,19 +673,23 @@ class Interferometer(Survey):
 
         Returns
         -------
+        sig_T : float
+            The contribution to the observed temperature signal from the observing system, in Kelvins.
         """
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
 
-        u_at_z, nvis_at_z, du_at_z = self.renorm_vis(z) # renorm visibilities to redshift
+        u_at_z, nvis_at_z, du_at_z = self.renorm_vis(z) # renorm visibilities to redshift of observation
         
         dusq = 2. * np.pi * u_at_z * du_at_z # 2d differential
         
         lambda_z = lambda_21 * (1.+z)
 
-        sig_T = ((lambda_z**2) * self.T_sys) / (self.Telescope.aeffdish * np.sqrt(self.Telescope.dnu * self.tint * nvis_at_z * dusq))
+        sig_T = ((lambda_z**2) * self.T_sys) / (self.aeffdish * np.sqrt(self.Telescope.dnu * self.tint * nvis_at_z * dusq))
 
         sig_T /= np.sqrt(self.Telescope.nbeam * self.Telescope.npol)
+
+        sig_T[np.isinf(sig_T)] = np.nan
         
         return sig_T
 
@@ -534,6 +702,13 @@ class Interferometer(Survey):
         ----------
         z : float (optional)
             The redshift of the observation. Defaults to None. 
+
+        Returns
+        -------
+        pnoise : NDarray
+            The noise power spectrum, in K^2 (Mpc h^-1)^3.
+        k_perp : NDarray
+            An array containing the perpendicular k values of the array layout, in h Mpc^-1.
         """
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
@@ -554,19 +729,37 @@ class Interferometer(Survey):
 
 
 
-class SingleDish(Survey):
+class SingleDish(Survey): # tested
     """
     The single-dish class, which can be instantiated to reflect the properties of a given observation.
 
     Parameters
     ----------
     Telescope : class Telescope
+        The telescope object with which the survey is carried out.
+    z_max : float
+        The maximum redshift of the survey.
+    z_min : float
+        The minimum redshift of the survey.
+    asurv : float
+        The survey area, in square degrees.
+    tsurv : float
+        The total collecting time of the survey, in hours.
+    T_atm : float
+        The atmospheric temperature contribution to the system temperature, in Kelvins.
+    
     """
-    def __init__(self, Telescope):  
+    def __init__(self, Telescope, z_max, z_min, asurv, tsurv, T_atm):  
+        self.z_max = z_max
+        self.z_min = z_min
+        self.asurv = asurv
+        self.tsurv = tsurv
+        self.Telescope = Telescope
+        self.T_atm = T_atm
         Survey.__init__(self, Telescope)
         # Determine min and max wavenumber according to beam fwhm amd survey volume
         # min k in perpendicular direction
-        comovarcmin = Planck18.kpc_comoving_per_arcmin(self.zmed).value * 1e-3 * hlittle # in Mpc/h 
+        comovarcmin = Planck18.kpc_comoving_per_arcmin(self.z_med).value * 1e-3 * hlittle # in Mpc/h 
         asurv_in_arcmin = np.sqrt(self.asurv) * 180. / np.pi * 60. # convert in deg and then in arcmin
         kmin1 = (2. * np.pi) / (comovarcmin * asurv_in_arcmin)
 
@@ -580,7 +773,7 @@ class SingleDish(Survey):
         self.kmax = 1e3
 
 
-    def sigmaT_per_pointing(self, z=None): 
+    def sigmaT_per_pointing(self, z=None): # tested
         """
         Calculate the deviation in the temperature signal due to the system temperature, for a given telescope pointing.
         In Kelvins. 
@@ -594,7 +787,7 @@ class SingleDish(Survey):
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
         lambda_z = lambda_21 * (1. + z)
-        sig_T = lambda_z**2 * self.T_sys / (self.Telescope.fov_at_z(z) * self.Telescope.aeffdish * np.sqrt(self.Telescope.dnu * self.tint))
+        sig_T = lambda_z**2 * self.T_sys / (self.Telescope.fov_at_z(z) * self.aeffdish * np.sqrt(self.Telescope.dnu * self.tint))
         
         # Scale to multiple dishes/beams/polarizations
         sig_T /= np.sqrt(self.Telescope.ndish * self.Telescope.nbeam * self.Telescope.npol)
@@ -602,7 +795,7 @@ class SingleDish(Survey):
         return sig_T
 
 
-    def noise_power_perp(self, z=None): 
+    def noise_power_perp(self, z=None): # tested
         """
         Parameters
         ----------
@@ -625,6 +818,14 @@ class SingleDish(Survey):
 def noisetokbin(kperparr, pnoise, karr):
     """
     Determines the noise in each element of an array of k bins.
+
+    Parameters
+    ----------
+    kperparr : NDarray
+        The array of perpendicular wavenumbers.
+    pnoise : NDarray
+        The noise power spectrum.
+    
     """
     nk = len(karr)
     pknoise = np.zeros(nk)
@@ -660,7 +861,23 @@ def noisetokbin(kperparr, pnoise, karr):
 
 def FT_gals(mock, HII_dim, box_len):
     """
-    Calculates the FT and the corresponding wavenumber for the input mock data.
+    Calculates the FT and the corresponding wavenumbers for the input mock data.
+
+    Parameters
+    ----------
+    mock : NDarray
+        Mock data field to be FT-ed.
+    HII_dim : int
+        The number of cells along the spatial dimensions of the field.
+    box_len : float
+        The comoving distance along the spatial dimensions of the field, in Mpc / h.
+
+    Returns
+    -------
+    k : NDarray
+        The wavenumbers of the Fourier-transformed field.
+    FT : NDarray
+        The Fourier transformed field.
     """
     # Generate a histogram of the data, with appropriate number of bins.
     edges = [np.linspace(0, box_len, HII_dim+1)] * 3
@@ -696,7 +913,14 @@ def power_from_ft(ft, k, n, HII_dim, box_len, ft2=None):
     n : int
         The total number of cells comprising the Fourier-transformed field.
     HII_dim : int
-        The number of cells along the spatial direction
+        The number of cells along the spatial dimensions of the field.
+    ft2 : NDarray (optional)
+        An additional Fourier-transformed field to calculate the cross-power spectrum with. Defaults to None.
+
+    Returns
+    -------
+    p_k_HI : NDarray
+    kbins : NDarray
     """
     if ft2 is None: # compute auto power if only one field is input
         ft2 = ft
@@ -712,12 +936,24 @@ def power_from_ft(ft, k, n, HII_dim, box_len, ft2=None):
 
 
 def noisetokbin(kperparr, pnoise, karr):
+
     """
     Given the perpendicular noise power spectrum pnoise as a function of perpendicular wavenumber kperp,
     interpolates the noise power spectrum for different wavenumber bins karr.
 
     Parameters
     ----------
+    kperparr : NDarray
+        The original wavenumber bins corresponding to the power spectrum pnoise.
+    pnoise : NDarray
+        The input power spectrum to be interpolated.
+    karr : NDarray
+        The wavenumber bins to interpolate the power spectrum to.
+
+    Returns
+    -------
+    pknoise : NDarray
+        The interpolated noise power spectrum.
     """
     nk = len(karr)
     pknoise = np.zeros(nk)
@@ -748,3 +984,5 @@ def noisetokbin(kperparr, pnoise, karr):
             pknoise[ik] = sum1 / sum2
 
     return pknoise
+
+
