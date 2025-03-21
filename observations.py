@@ -15,6 +15,9 @@ from astropy import units
 from astropy.time import Time
 import ska_ost_array_config.UVW as UVW
 from ska_ost_array_config.array_config import LowSubArray
+from ska_ost_array_config.UVW import plot_uv_coverage
+from scipy.interpolate import make_smoothing_spline
+import matplotlib.pyplot as plt
 
 
 
@@ -229,11 +232,10 @@ def get_survey_volume(z_max, z_min, f_sky=0.0024):
 
 # total observation area of ska-low in z=3-6 band is approx 0.24% of sky - for ref, moon covers 0.00048%
 
+
 """
 Below are modified versions of Laura's code, edited to be specific to SKA-LOW.
 """
-
-
 
 class Telescope(ABC):
     """
@@ -382,7 +384,7 @@ class Survey(Telescope):
         self.asurv = self.asurv * (np.pi/180.)**2 # Survey area in sr
 
         self.npt = self.asurv / Telescope.fov_at_z(self.z_med) # Number of pointings
-        self.tint = (self.tsurv*3600.) / self.npt # Integration time per pointing
+        self.t_single = (self.tsurv*3600.) / self.npt # Integration time per pointing
         
         self.T_sys = get_T_sys1(self.z_med, Telescope.T_spl, self.T_atm) + T_CMB + get_T_rcv(self.z_med) # in K
         
@@ -405,8 +407,8 @@ class Survey(Telescope):
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
         r = get_distance(z) * hlittle # in Mpc/h
-        H_z = (hlittle * 100 * 1000 * (OMm * (1+z)**3 + OMl)**0.5) / Mpc_to_m # in s^-1
-        y = c * 1e-3 * (1.+z)**2 / (H_z * nu_21) / Mpc_to_m # in Mpc s
+        H_z = (hlittle * 100 * (OMm * (1+z)**3 + OMl)**0.5) # in km s^-1 Mpc^-1
+        y = c * 1e-3 * (1.+z)**2 / (H_z * nu_21) * hlittle # in Mpc s/h
         
         return r**2 * y  * self.Telescope.fov_at_z(z) * self.Telescope.dnu
 
@@ -560,6 +562,7 @@ class Interferometer(Survey):
 
         # Start time of the observation
         start_time = Time("2024-09-25T03:23:21.6", format='isot', scale='utc')
+        nu = nu_21 / (1+self.z_med)
 
         observation = simulate_observation(
             array_config=LowSubArray(subarray_type=Telescope.stage).array_config,
@@ -567,8 +570,8 @@ class Interferometer(Survey):
             start_time=start_time,
             duration=5000,
             integration_time=500,
-            ref_freq=280e6,
-            chan_width=1e6,
+            ref_freq=nu,
+            chan_width=Telescope.dnu,
             n_chan=1,
             horizon=0,
         )
@@ -577,7 +580,7 @@ class Interferometer(Survey):
 
         u_vals = (uvw.u_wave**2 + uvw.v_wave**2)**0.5
 
-        bins = np.linspace(0, 2000, 101)
+        bins = np.geomspace(20, 2000, 51)
 
         counts, _ = np.histogram(u_vals, bins)
 
@@ -585,13 +588,27 @@ class Interferometer(Survey):
 
         self.nvis = counts.astype(float)
 
-        self.du = self.u[1] - self.u[0] # bins linearly spaced, so du is does not vary with u
+        self.du = bins[1:] - bins[:-1] 
 
         self.nvis /= self.du * self.u * 2 * np.pi
 
-        sumn = 2. * np.pi * self.du * sum(self.nvis * self.u) # numerical approximation to the half plane integral
-        #sumn = 2. * np.pi * sum(self.nvis)
+        sumn = 2. * np.pi * sum(self.nvis * self.u * self.du) # numerical approximation to the half plane integral
+
         self.nvis *= (0.5 * Telescope.ndish * (Telescope.ndish-1.)) / sumn # this normalises the half plane integral to the total number of baseline pairs
+
+
+    def nvis_to_spline(self, lam=1e6):
+        """
+        Fits the baseline density distribution n(u) to a spline.
+
+        Parameters
+        ----------
+        lam : float (optional)
+            The degree of smoothing applied to the spline creation. Defaults to 1e6.
+        """
+        spl = make_smoothing_spline(self.u, self.nvis, lam=lam)
+
+        return spl
 
 
     def karr(self):
@@ -613,7 +630,7 @@ class Interferometer(Survey):
 
     def renorm_vis(self, z=None): 
         """
-        Renormalises the visibility files (read in by read_vis(visfile)) to a given redshift z.
+        Renormalises the baseline variables to a given redshift z.
 
         Parameters
         ----------
@@ -625,9 +642,9 @@ class Interferometer(Survey):
         u_at_z : NDarray
             The renormalised u coordinate distribution.
         nvis_at_z : NDarray
-
+            The renormalised baseline number density.
         du_at_z : float
-            The u coordinate separation.
+            The renormalised u coordinate separation.
         """
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
@@ -685,7 +702,7 @@ class Interferometer(Survey):
         
         lambda_z = lambda_21 * (1.+z)
 
-        sig_T = ((lambda_z**2) * self.T_sys) / (self.aeffdish * np.sqrt(self.Telescope.dnu * self.tint * nvis_at_z * dusq))
+        sig_T = ((lambda_z**2) * self.T_sys) / (self.aeffdish * np.sqrt(self.Telescope.dnu * self.t_single * nvis_at_z * dusq))
 
         sig_T /= np.sqrt(self.Telescope.nbeam * self.Telescope.npol)
 
@@ -725,6 +742,49 @@ class Interferometer(Survey):
         k_perp = self.kperp_at_z(z)
         
         return pnoise, k_perp
+    
+
+    def plot_uv(self, pointing_time=None, duration=None):
+        """
+        Plots the uv distribution of a given survey, using the functionality provided by SKA-ost-array-config.
+
+        Parameters
+        ----------
+        integration_time : float (optional)
+            The time per pointing, in seconds. If no value is specified, this defaults to the integration time of the survey.
+        duration : float (optional)
+            The total duration of the observation, in hours. If no value is specified, this defaults to the survey time.
+        """
+
+        if pointing_time is None:
+            pointing_time = self.t_single
+        if duration is None:
+            duration = self.tsurv
+
+        duration *= 3600
+
+        phase_centre = SkyCoord("21:08:46.8 -88:57:23.4", unit=(units.hourangle, units.deg))
+
+        start_time = Time("2024-09-25T03:23:21.6", format='isot', scale='utc') # Start time of the observation
+
+        nu = nu_21 / (1+self.z_med)
+
+        observation = simulate_observation(
+            array_config=LowSubArray(subarray_type=self.Telescope.stage).array_config,
+            phase_centre=phase_centre,
+            start_time=start_time,
+            duration=duration,
+            integration_time=pointing_time,
+            ref_freq=nu,
+            chan_width=self.Telescope.dnu,
+            n_chan=1,
+            horizon=0,
+        )
+
+        uvw = UVW.UVW(observation, ignore_autocorr=False)
+        plot_uv_coverage(uvw)
+
+        plt.title("Duration: " + str(duration / 3600) + " hours, pointing time: " + str(pointing_time) + " seconds, for " + str(self.Telescope.stage))
 
 
 
@@ -747,7 +807,6 @@ class SingleDish(Survey): # tested
         The total collecting time of the survey, in hours.
     T_atm : float
         The atmospheric temperature contribution to the system temperature, in Kelvins.
-    
     """
     def __init__(self, Telescope, z_max, z_min, asurv, tsurv, T_atm):  
         self.z_max = z_max
@@ -783,11 +842,16 @@ class SingleDish(Survey): # tested
         ----------
         z : float (optional)
             The redshift of the observation. Defaults to None. 
+
+        Returns
+        -------
+        sig_T : float
+            The contribution to the observed temperature signal from the observing system, in Kelvins.
         """
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
         lambda_z = lambda_21 * (1. + z)
-        sig_T = lambda_z**2 * self.T_sys / (self.Telescope.fov_at_z(z) * self.aeffdish * np.sqrt(self.Telescope.dnu * self.tint))
+        sig_T = lambda_z**2 * self.T_sys / (self.Telescope.fov_at_z(z) * self.aeffdish * np.sqrt(self.Telescope.dnu * self.t_single))
         
         # Scale to multiple dishes/beams/polarizations
         sig_T /= np.sqrt(self.Telescope.ndish * self.Telescope.nbeam * self.Telescope.npol)
@@ -801,6 +865,11 @@ class SingleDish(Survey): # tested
         ----------
         z : float (optional)
             The redshift of the observation. Defaults to None. 
+
+        Returns
+        -------
+        pnoise : float
+            The noise power contribution.
         """
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
@@ -813,50 +882,6 @@ class SingleDish(Survey): # tested
         return pnoise
 
 
-
-
-def noisetokbin(kperparr, pnoise, karr):
-    """
-    Determines the noise in each element of an array of k bins.
-
-    Parameters
-    ----------
-    kperparr : NDarray
-        The array of perpendicular wavenumbers.
-    pnoise : NDarray
-        The noise power spectrum.
-    
-    """
-    nk = len(karr)
-    pknoise = np.zeros(nk)
-    kperpmin = kperparr[0]
-    kperpmax = kperparr[-1]
-    nint = 10000
-    kperpint = np.linspace(kperpmin, kperpmax, nint)
-    dkperpint = (kperpmax-kperpmin) / nint
-    pnoiseint = np.interp(kperpint, kperparr, pnoise)
-    
-    # Average noise power spectrum into k-bins
-    for ik in range(nk):
-        k = karr[ik]
-        # If k is less than the minimum k_perp, no measurement is possible
-        if (k < kperpmin):
-            pknoise[ik] = 1.e+99
-        else:
-        # This approximates : int P_N(k_perp) dOmega / int dOmega
-        # where dOmega = sin(theta) dtheta dphi and k_perp = k sin(theta)
-            sum1 = 0.
-            sum2 = 0.
-            for ikperp in range(nint):
-                kperp = kperpint[ikperp]
-                if (kperp < k):
-                    wei = (kperp / k) * (dkperpint / np.sqrt((k**2)-(kperp**2)))
-                    sum1 += pnoiseint[ikperp] * wei
-                    sum2 += wei
-        
-            pknoise[ik] = sum1 / sum2
-
-    return pknoise
 
 
 def FT_gals(mock, HII_dim, box_len):
@@ -920,7 +945,9 @@ def power_from_ft(ft, k, n, HII_dim, box_len, ft2=None):
     Returns
     -------
     p_k_HI : NDarray
+        The power spectrum.
     kbins : NDarray
+        The corresponding wavenumbers for the power spectrum.
     """
     if ft2 is None: # compute auto power if only one field is input
         ft2 = ft
@@ -981,8 +1008,8 @@ def noisetokbin(kperparr, pnoise, karr):
                     wei = (kperp / k) * (dkperpint / np.sqrt((k**2)-(kperp**2)))
                     sum1 += pnoiseint[ikperp] * wei
                     sum2 += wei
+
             pknoise[ik] = sum1 / sum2
 
     return pknoise
-
 

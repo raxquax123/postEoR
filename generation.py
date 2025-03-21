@@ -24,6 +24,7 @@ def generate_box(
     box_len=64,
     overdens_cap=1.686,
     connectivity=3,
+    normalise_halos=True,
 ) -> Box:
     """
     Generates a coeval box at specified redshift using the base functionality of 21cmFAST and post-processing functions in tools.py.
@@ -38,6 +39,10 @@ def generate_box(
         The size of the box in Mpc / h.
     overdens_cap : float (optional)
         The minimum overdensity required for a cell to be considered part of a halo. Defaults to 1.686 (Press-Schechter critical overdensity for collapse).
+    connectivity : float (optional)
+        The connectivity parameter used in the watershed algorithm. Defaults to 3 (maximum).
+    normalise_halos : bool (optional)
+        Whether to normalise the halo mass based on the overdensity cutoff for halo inclusion. Defaults to False.
 
     Returns
     -------
@@ -55,7 +60,7 @@ def generate_box(
     """
     # 21cmFAST - generates and evolves the density field using 2LPT, and produces the bt expected from eor
     initial_conditions = p21c.initial_conditions(
-        user_params = {"HII_DIM": HII_dim, "BOX_LEN": box_len, "USE_2LPT": True, "HMF": 3},
+        user_params = {"HII_DIM": HII_dim, "BOX_LEN": box_len / hlittle, "USE_2LPT": True, "HMF": 3},
         cosmo_params=cosmo_params,
         random_seed=1122
     )
@@ -65,14 +70,14 @@ def generate_box(
     )
     ionized_field = p21c.ionize_box(perturbed_field = perturbed_field) # export neutral fraction from 21cmFAST (EoR bubbles)
     dens = getattr(perturbed_field, "density") # export overdensity field for use in post-processing
-    halos = tools.find_halos_watershed(dens, box_len, HII_dim, overdens_cap=overdens_cap, connectivity=connectivity)
+    halos = tools.find_halos_watershed(dens, box_len, HII_dim, overdens_cap=overdens_cap, connectivity=connectivity, normalise=normalise_halos)
     HI_distr = tools.get_HI_field(halos, z, box_len, HII_dim) # obtain the neutral hydrogen distribution, given a halo field and the redshift of evaluation
 
     H_0 = hlittle * 100
     BT_21c = p21c.brightness_temperature(ionized_box=ionized_field, perturbed_field=perturbed_field) # calculate 21cm bt from 21cmFAST - eor / neutral igm contribution
-    HI_dens = HI_distr * solar_mass / (box_len / HII_dim * Mpc_to_m)**3 # calculate \rho_{HI} in kg/m^3
-    BT = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+z)**2 / ((H_0*1000/Mpc_to_m)*(OMm*(1+z)**3+OMl)**0.5)) * HI_dens # bt formula from wolz et al. 2017
-    BT_EoR = getattr(BT_21c, "brightness_temp") # getting bt from neutral igm (pre-reionization)
+    HI_dens = HI_distr * solar_mass / (box_len / HII_dim * Mpc_to_m)**3 # calculate \rho_{HI} in kg/m^3 h^2
+    BT = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+z)**2 / ((H_0*1000/Mpc_to_m)*(OMm*(1+z)**3+OMl)**0.5)) * HI_dens * hlittle**2 # bt formula from wolz et al. 2017, removing h-agnosticity as now looking at observable
+    BT_EoR = getattr(BT_21c, "brightness_temp")  # getting bt from neutral igm (pre-reionization)
     BT_fin = np.maximum(BT, BT_EoR) # avoiding 'double-counting' of bt from post-processing and 21cmFAST
     box = Box(z, box_len, HII_dim, dens, halos, BT_fin)
 
@@ -152,7 +157,7 @@ def generate_cone(
 
     H_0 = hlittle * 100
     HI_dens = HI_ltcone * solar_mass / (box_len / HII_dim * Mpc_to_m)**3 # calculate \rho_{HI} in kg/m^3
-    BT_HI_ltcone = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+redshift)**2 / ((H_0*1000/Mpc_to_m)*(OMm*(1+redshift)**3+OMl)**0.5)) * HI_dens # bt formula from wolz et al. 2017
+    BT_HI_ltcone = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+redshift)**2 / ((H_0*1000/Mpc_to_m)*(OMm*(1+redshift)**3+OMl)**0.5)) * HI_dens / hlittle**2 # bt formula from wolz et al. 2017, removing h-agnosticity as now looking at observable
     BT_ltcone = np.maximum(BT_HI_ltcone, BT_EoR_ltcone)
 
     # set up Ltcone object, containing the post-EoR data

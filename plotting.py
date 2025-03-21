@@ -55,7 +55,7 @@ def plot_lightcone(
     labels = [item.get_text() for item in ax.get_xticklabels()]
     ax.set_xticklabels([str(round(float(x), 1)) for x in labels if label != ''])
     ax.set_xlabel("Redshift")
-    ax.set_ylabel("y (Mpc)")
+    ax.set_ylabel("y, Mpc/h")
     fig.suptitle(title)
 
     plt.savefig(save_loc)
@@ -98,13 +98,13 @@ def plot_colormaps(
 
     # plotting colormaps of overdensity, neutral fraction, brightness temperature
     cb1 = ax1.pcolormesh(x1, y1, dens[:, :, 10], cmap = "viridis")
-    ax1.set_xlabel('$x$ (Mpc)')
-    ax1.set_ylabel('$y$ (Mpc)')
+    ax1.set_xlabel('$x$, Mpc/h')
+    ax1.set_ylabel('$y$, Mpc/h')
     cbar1 = fig.colorbar(cb1)
     cbar1.set_label('Overdensity', rotation=270, labelpad = 12)
 
     cb3 = ax3.pcolormesh(x1, y1, BT[:, :, 10], cmap = "viridis")
-    ax3.set_xlabel('$x$ (Mpc)')
+    ax3.set_xlabel('$x$, Mpc/h')
     cbar3 = fig.colorbar(cb3)
     cbar3.set_label('Brightness temperature, mK', rotation=270, labelpad = 12)
     cbar3.formatter.set_powerlimits((0, 0))
@@ -157,8 +157,8 @@ def plot_mfs(counts,
     plt.title(title)
     plt.yscale("log")
     plt.xscale("log")
-    plt.ylabel('$\dfrac{dn}{d\log M}$ ((h/Mpc)$^3$)')
-    plt.xlabel('M (h$^{-1}$M$_{\odot}$)')
+    plt.ylabel('$\dfrac{dn}{d\log M}$, (h/Mpc)$^3$')
+    plt.xlabel('M, h$^{-1}$M$_{\odot}$')
 
     plt.savefig(str(save_loc))
 
@@ -202,7 +202,7 @@ def plot_ps(ps,
 
     ax.set_yscale("log")
     ax.set_xscale("log")
-    ax.set_ylabel("P(k), (mK)$^2$(h/Mpc)$^3$")
+    ax.set_ylabel("P(k), (Mpc/h)$^3$")
     ax.set_xlabel("k, (h/Mpc)$^{-1}$")
     ax.legend()
     ax.set_title(title)

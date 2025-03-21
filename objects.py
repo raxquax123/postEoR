@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from abc import ABC
 from postEoR.tools import hi_from_halos_2
-from postEoR.tools import hlittle, OMm, OMl, c
+from postEoR.tools import hlittle, OMm, OMl, c, Mpc_to_m, solar_mass, G
 from postEoR.analysis import get_PS
 from matplotlib.ticker import AutoLocator
 from hmf import MassFunction
@@ -90,8 +90,8 @@ class Base(ABC):
             plt.yscale("log")
             plt.xscale("log")
             plt.legend()
-            plt.ylabel('$\dfrac{dn}{d\log M}$ (Mpc$^{-3}$)')
-            plt.xlabel('M (M$_{\odot}$)')
+            plt.ylabel('$\dfrac{dn}{d\log M}$, (Mpc/h)$^{-3}$')
+            plt.xlabel('M, M$_{\odot}/h$')
             plt.xlim(10**Mmin, 10**Mmax)
 
             plt.savefig(str(save_loc))
@@ -160,8 +160,8 @@ class Base(ABC):
             plt.title(title)
             plt.yscale("log")
             plt.xscale("log")
-            plt.ylabel('$\dfrac{dn}{d\log M}$ (Mpc$^{-3}$)')
-            plt.xlabel('M (M$_{\odot}$)')
+            plt.ylabel('$\dfrac{dn}{d\log M}$, (Mpc/h)$^{-3}$')
+            plt.xlabel('M, M$_{\odot}/h$')
             plt.legend()
 
             plt.savefig(str(save_loc))
@@ -180,6 +180,7 @@ class Base(ABC):
         save_loc="ps.png", 
         save_fig=True,
         clear_prev_plot=False,
+        norm=True,
     ): 
         """
         Calculates the spherical power spectrum for the selected field of the structure. Can also automatically save the figure.
@@ -202,7 +203,10 @@ class Base(ABC):
             The path to the save location of the output plot. Defaults to ps.png in the working directory.
         save_fig : bool (optional)
             Whether or not to automatically save the plot. Defaults to True.
-
+        clear_prev_plot : bool (optional)
+            Whether or not to erase any previous plots from the figure. Defaults to False.
+        norm : bool (optional)
+            Whether to normalise the fields to 1 before taking their power spectra. Defaults to True.
         Returns
         -------
         new_k : NDarray
@@ -219,14 +223,21 @@ class Base(ABC):
         >>> k, ps, err = box.get_ps(field="BT", linestyle="--", save_fig=False)
         """
         if field == "BT":
-            x = self.BT_field
+            x = self.BT_field.copy()
         elif field == "dens":
-            x = self.density_field
+            x = self.density_field.copy()
         elif field == "halo":
-            x = self.halo_field
+            x = self.halo_field.copy()
         else:
             print("Invalid field entered. Defaulting to brightness temperature. \n Valid field options are \"BT\", \"dens\", and \"halo\".")
-            x = self.BT_field
+            x = self.BT_field.copy()
+
+        if norm:
+            if field == "dens": # density field already an overdensity
+                pass
+            else: # converting other fields to an overfield
+                x /= np.mean(x)
+                x -= 1
 
         new_k, plot1, error1 = get_PS(x, self.box_len, self.HII_dim, kbins, remove_nan)
 
@@ -238,8 +249,8 @@ class Base(ABC):
 
             plt.yscale("log")
             plt.xscale("log")
-            plt.ylabel("P(k), (mK)$^2$)")
-            plt.xlabel("k, (Mpc)$^{-1}$)")
+            plt.ylabel("P(k), (Mpc/h)$^3$")
+            plt.xlabel("k, (Mpc/h)$^{-1}$")
             plt.legend()
             plt.title(title)
 
@@ -259,6 +270,7 @@ class Base(ABC):
         save_loc="dimless_ps.png", 
         save_fig=True,
         clear_prev_plot=False,
+        norm=True,
     ): 
         """
         Calculates the dimensionless spherical power spectrum for the selected field of the structure. 
@@ -281,6 +293,10 @@ class Base(ABC):
             The path to the save location of the output plot. Defaults to dimless_ps.png in the working directory.
         save_fig : bool (optional)
             Whether or not to automatically save the plot. Defaults to True.
+        clear_prev_plot : bool (optional)
+            Whether or not to erase any previous plots from the figure. Defaults to False.
+        norm : bool (optional)
+            Whether to normalise the fields to 1 before taking their power spectra. Defaults to True.
 
         Returns
         -------
@@ -297,7 +313,20 @@ class Base(ABC):
         >>> box = gen.generate_box(z=4)
         >>> k, ps, err = box.get_dimless_ps(field="BT", linestyle="--", save_fig=False)
         """
-        new_k, plot1, error1 = self.get_PS(save_fig=False, kbins=kbins, remove_nan=remove_nan)
+        if field == "BT":
+            x = self.BT_field
+        elif field == "dens":
+            x = self.density_field
+        elif field == "halo":
+            x = self.halo_field
+        else:
+            print("Invalid field entered. Defaulting to brightness temperature. \n Valid field options are \"BT\", \"dens\", and \"halo\".")
+            x = self.BT_field
+
+        if norm:
+            x /= np.mean(x)
+        
+        new_k, plot1, error1 = get_PS(x, self.box_len, self.HII_dim, kbins, remove_nan)
         
         plot1 *= new_k**3 / (2 * np.pi**2) 
         error1 *= new_k**3 / (2 * np.pi**2) 
@@ -310,8 +339,8 @@ class Base(ABC):
 
             plt.yscale("log")
             plt.xscale("log")
-            plt.ylabel("P(k), (mK)$^2$)")
-            plt.xlabel("k, (Mpc)$^{-1}$)")
+            plt.ylabel("$\Delta$(k)")
+            plt.xlabel("k, (Mpc/h)$^{-1}$")
             plt.legend()
             plt.title(title)
 
@@ -350,11 +379,14 @@ class Base(ABC):
 
         if field == "BT":
             x = self.BT_field
+            label = "BT, mK"
         elif field == "halo":
             x = self.halo_field
+            label = "Halo mass, M$_{\odot}$/h"
         else:
             print("Invalid field entered. Defaulting to brightness temperature. \n Valid field options are \"BT\" and \"halo\".")
             x = self.BT_field
+            label = "BT, mK"
 
         # box coordinates
         fin_size = np.shape(x)[0] / self.HII_dim * self.box_len
@@ -363,15 +395,15 @@ class Base(ABC):
 
         # plotting colormaps of overdensity, neutral fraction, brightness temperature
         cb1 = ax1.pcolormesh(x1, y1, self.density_field[:, :, 10], cmap = "viridis")
-        ax1.set_xlabel('$x$ (Mpc)')
-        ax1.set_ylabel('$y$ (Mpc)')
+        ax1.set_xlabel('$x$, Mpc/h')
+        ax1.set_ylabel('$y$, Mpc/h')
         cbar1 = fig.colorbar(cb1)
         cbar1.set_label('Overdensity', rotation=270, labelpad = 12)
 
         cb3 = ax3.pcolormesh(x1, y1, x[:, :, 10], cmap = "viridis", **kwargs)
-        ax3.set_xlabel('$x$ (Mpc)')
+        ax3.set_xlabel('$x$, Mpc/h')
         cbar3 = fig.colorbar(cb3)
-        cbar3.set_label(str(field), rotation=270, labelpad = 12)
+        cbar3.set_label(str(label), rotation=270, labelpad = 12)
         cbar3.formatter.set_powerlimits((0, 0))
 
         fig.suptitle("HII_dim " + str(self.HII_dim) + ", box_len " + str(self.box_len) + ",  z = " + str(self.z))
@@ -430,8 +462,8 @@ class Base(ABC):
         """
         bins = self.gen_k_bins()
 
-        k1, ps1, _ = self.get_PS("BT", remove_nan=False, kbins=bins, save_fig=False)
-        _, ps2, _ = self.get_PS("dens", remove_nan=False, kbins=bins, save_fig=False)
+        k1, ps1, _ = self.get_PS("BT", remove_nan=False, kbins=bins, save_fig=False, norm=True)
+        _, ps2, _ = self.get_PS("dens", remove_nan=False, kbins=bins, save_fig=False, norm=True)
         HI_bias = (ps1 / ps2)**0.5
 
         k1 = k1[~np.isnan(HI_bias)]
@@ -514,14 +546,23 @@ class Base(ABC):
 
             plt.yscale("log")
             plt.xscale("log")
-            plt.ylabel("P(k), (mK)$^2$)")
-            plt.xlabel("k, (Mpc)$^{-1}$)")
+            plt.ylabel("P(k), (Mpc/h)$^3$")
+            plt.xlabel("k, h/Mpc")
             plt.legend()
             plt.title(title)
 
             plt.savefig(str(save_loc))
 
         return k, ps, err
+    
+
+    def get_omega_HI(self):
+        H_0_std_units = (hlittle * 100 * 1000) / (Mpc_to_m)
+
+        rho_HI = np.sum(hi_from_halos_2(self.halo_field, 5)) / self.box_len**3 * hlittle**2 # removing h-agnosticity - omega_HI is h-agnostic by definition
+        omega_HI = (rho_HI * solar_mass / (Mpc_to_m)**3) / ((3 * H_0_std_units ** 2) / (8 * np.pi * G))
+
+        return omega_HI
 
 
 
@@ -538,13 +579,13 @@ class Ltcone(Base):
     z_end : float
         The minimum redshift of the lightcone.
     box_len : float
-        The length in Mpc / h of the lightcone along its spatial dimensions.
+        The length in Mpc/h of the lightcone along its spatial dimensions.
     HII_dim : float
         The number of cells along the spatial dimensions of the lightcone.
     density_field : NDarray
         The overdensity field of the lightcone, calculated using 21cmFAST. Dimensionless.
     halo_field: NDarray
-        The halo field of the lightcone, in solar masses / h.
+        The halo field of the lightcone, in solar masses/h.
     BT_field : NDarray
         The brightness temperature field of the lightcone, in mK.
     Lightconer : Lightconer object
@@ -613,7 +654,7 @@ class Ltcone(Base):
             label = "Overdensity"
         elif field == "halo":
             x = self.halo_field
-            label = "Halo mass, M$_{\odot}$"
+            label = "Halo mass, M$_{\odot}$/h"
         else:
             print("Invalid field entered. Defaulting to brightness temperature. \n Valid field options are \"BT\", \"dens\", and \"halo\".")
             x = self.BT_field
@@ -654,7 +695,7 @@ class Ltcone(Base):
         labels = [item.get_text() for item in ax.get_xticklabels()]
         ax.set_xticklabels([str(round(float(label), 1)) for label in labels if label != ''])
         ax.set_xlabel("Redshift")
-        ax.set_ylabel("y (Mpc)")
+        ax.set_ylabel("y, Mpc/h")
         fig.suptitle(title)
 
         plt.savefig(str(save_loc))
@@ -732,10 +773,10 @@ class Ltcone(Base):
                 cross[j,i] = plot1[i] * plot2[j]
 
         cb = plt.pcolormesh(np.log(new_k_1),np.log(new_k_2), np.log(cross), cmap = "viridis")
-        plt.xlabel("log(k$_{\perp}$, (Mpc)$^{-1}$)")
-        plt.ylabel("log(k$_\|$, (Mpc)$^{-1}$)")
+        plt.xlabel("log(k$_{\perp}$, h/Mpc")
+        plt.ylabel("log(k$_\|$, h/Mpc")
         cbar = plt.colorbar(cb)
-        cbar.set_label("log(P$_{cross}$, (mK)$^2$)")
+        cbar.set_label("log(P$_{cross}$, (Mpc/h)$^2$")
         plt.title(str(title))
 
         plt.savefig(str(save_loc))
@@ -743,12 +784,12 @@ class Ltcone(Base):
 
     def get_distance(self) -> float:
         """
-        Calculates line of sight distance covered by the lightcone, in units of Mpc. Assumes a flat ΛCDM cosmology.
+        Calculates the line-of-sight distance covered by the lightcone, in units of Mpc/h. Assumes a flat ΛCDM cosmology.
 
         Returns
         -------
         dist : float
-            The distance corresponding to the input redshift interval, in Mpc.
+            The distance corresponding to the input redshift interval, in Mpc/h.
 
         Example usage
         -------------
@@ -763,7 +804,7 @@ class Ltcone(Base):
         c_km = c / 1000
         dx = lambda z: 1 / (H_0*(OMm*(1+z)**3+OMl)**0.5)
         dist = quad(dx, z_end, z_start)
-        dist = dist[0] * c_km
+        dist = dist[0] * c_km * hlittle
 
         return dist
 
@@ -778,13 +819,13 @@ class Box(Base):
     z : float
         The redshift of the box.
     box_len : float
-        The length in Mpc / h of the box dimensions.
+        The length in Mpc/h of the box dimensions.
     HII_dim : float
         The number of cells along the box dimensions.
     density_field : NDarray
         The overdensity field of the coeval box, calculated using 21cmFAST. Dimensionless.
     halo_field: NDarray
-        The halo field of the coeval box, in solar masses / h.
+        The halo field of the coeval box, in solar masses/h.
     BT_field : NDarray
         The brightness temperature field of the coeval box, in mK.
         """
