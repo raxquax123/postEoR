@@ -11,6 +11,7 @@ from postEoR.tools import hlittle, OMm, OMl, c, Mpc_to_m, solar_mass, G
 from postEoR.analysis import get_PS
 from matplotlib.ticker import AutoLocator
 from hmf import MassFunction
+from scipy.interpolate import make_interp_spline
 plt.rcParams.update({'font.size': 15})
 
 
@@ -30,6 +31,7 @@ class Base(ABC):
         clear_prev_plot=False,
         Mmin=9,
         Mmax=12,
+        no_bins=10
     ):
         """
         Generates a halo mass function at a given redshift. Used for testing of the halo finder.
@@ -65,7 +67,7 @@ class Base(ABC):
         >>> bins, counts, los_dist = box.gen_hmf(color="tab:orange")
         """
         if set_bins:
-            bins1 = np.geomspace(10**Mmin, 10**Mmax, 10)
+            bins1 = np.geomspace(10**Mmin, 10**Mmax, no_bins)
             counts, bins = np.histogram(self.halo_field, bins1)
         else:
             counts, bins = np.histogram(self.halo_field)
@@ -80,7 +82,8 @@ class Base(ABC):
                 plt.clf() # clearing any previous plots
             plt.rcParams['figure.figsize'] = [9, 6]
             bins_plot = (bins[1:] + bins[:-1]) / 2
-            plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*self.box_len**2*los_dist)), histtype='step', label='z = ' + str(self.z), color=str(color))
+            #plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*self.box_len**2*los_dist)), histtype='step', label='z = ' + str(self.z), color=str(color))
+            plt.hist(bins_plot, bins, weights=(0.5 * counts / ((bins[1:]-bins[:-1]) * self.box_len**2 * los_dist) * (bins[1:]+bins[:-1])), histtype='step', label='z = ' + str(self.z), color=str(color))
             mf1 = MassFunction(Mmin=Mmin, Mmax=Mmax, z = self.z,
                         cosmo_params={"Om0":OMm}, 
                         hmf_model="Watson") 
@@ -394,13 +397,13 @@ class Base(ABC):
         y1, x1 = np.mgrid[slice(dy / 2, fin_size, dy), slice(dx / 2, fin_size, dx)]
 
         # plotting colormaps of overdensity, neutral fraction, brightness temperature
-        cb1 = ax1.pcolormesh(x1, y1, self.density_field[:, :, 10], cmap = "viridis")
+        cb1 = ax1.pcolormesh(x1, y1, self.density_field[:, :, 10], cmap='magma')
         ax1.set_xlabel('$x$, Mpc/h')
         ax1.set_ylabel('$y$, Mpc/h')
         cbar1 = fig.colorbar(cb1)
         cbar1.set_label('Overdensity', rotation=270, labelpad = 12)
 
-        cb3 = ax3.pcolormesh(x1, y1, x[:, :, 10], cmap = "viridis", **kwargs)
+        cb3 = ax3.pcolormesh(x1, y1, x[:, :, 10], cmap='magma', **kwargs)
         ax3.set_xlabel('$x$, Mpc/h')
         cbar3 = fig.colorbar(cb3)
         cbar3.set_label(str(label), rotation=270, labelpad = 12)
@@ -557,12 +560,43 @@ class Base(ABC):
     
 
     def get_omega_HI(self):
+        """
+        Calculates the dimensionless HI density parameter.
+
+        Returns
+        -------
+        omega_HI : float
+            The dimensionless HI density parameter.
+        """
         H_0_std_units = (hlittle * 100 * 1000) / (Mpc_to_m)
 
         rho_HI = np.sum(hi_from_halos_2(self.halo_field, 5)) / self.box_len**3 * hlittle**2 # removing h-agnosticity - omega_HI is h-agnostic by definition
         omega_HI = (rho_HI * solar_mass / (Mpc_to_m)**3) / ((3 * H_0_std_units ** 2) / (8 * np.pi * G))
 
         return omega_HI
+    
+
+    def get_SNR(self, survey):
+        """
+        Calculates the expected signal-to-noise ratio at the observed scales in a survey.
+
+        Parameters
+        ----------
+        survey : Survey object
+            The survey which will be observing the field.
+
+        Returns
+        -------
+        snr : NDarray
+            The signal-to-noise ratio for the observable wavenumbers. 
+        """
+        BT_k, BT_ps = get_PS(self.BT_field, self.box_len, self.HII_dim)
+        ps, k = survey.noise_power_perp()
+
+        spl = make_interp_spline(k, ps)
+        snr = BT_ps / spl(BT_k)
+
+        return snr
 
 
 

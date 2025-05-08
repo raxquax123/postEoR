@@ -314,7 +314,7 @@ def create_spherical_profile(halo, z, box_len, HII_dim, max_rad=1):
     return sph_prof_fin
 
 
-def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0., connectivity=3, compactness=0, normalise=True):
+def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=None, connectivity=3, compactness=0, normalise=True, smooth=False, sigma=1):
     """
     Returns mass and centre position of halos in solar masses. 
     Stops at either no change after algorithm applied, or when maximum number of iterations has been reached.
@@ -328,9 +328,9 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0., connectivity=3
     HII_dim : int
         The number of cells in each of the spatial dimensions of the box / cone.
     overdens_cap : float (optional)
-        The minimum overdensity for which a cell is considered to be associated with a halo. Defaults to 0.
+        The minimum overdensity for which a cell is considered to be associated with a halo. Defaults to None (applies simple linear approximation to optimal overdens_cap based on matching to theoretical HMF).
     connectivity : float (optional)
-        The neighbour connectivity parameter used in the watershed algorithm. Defaults to 3 (maximum).
+        The neighbour connectivity parameter used in the watershed algorithm. Defaults to 3 (maximum - going beyond this doesn't change the halos).
     compactness : float (optional)
         The object compactness parameter used in the watershed algorithm. Defaults to 1.
 
@@ -339,8 +339,15 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0., connectivity=3
     halo_field : NDarray
         The distribution of halo masses across the field, in solar masses/h.
     """
+    if overdens_cap is None:
+        overdens_cap = -54.7 * box_len / HII_dim + 16.75 # simple linear approximation to the optimal overdens cap to match hmf to theoretical
+        print("Optimal overdensity cap used is " + str(overdens_cap))
+
     image = dens.copy()
     image[dens < overdens_cap] = 0
+
+    if smooth:
+        image = ndimage.gaussian_filter(image, sigma=(sigma, sigma, sigma), order=0)
 
     labels = watershed(-image, connectivity=connectivity, compactness=compactness) 
     print(np.max(labels)) # prints total number of halos, to keep track of mass allocation progress
@@ -352,12 +359,14 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=0., connectivity=3
     z_comov = 0
     H = H_0_std_units * (OMm*(1+z_comov)**3 + OMl) ** 0.5
     crit_M_dens = (3 * H ** 2) / (8 * np.pi * G) * (OMm * (1+z_comov)**3) / (OMm * (1+z_comov)**3 + OMl) / hlittle**2 # using the critical density at a set redshift as the simulation is comoving. h-agnostic
+    print("crit dens " + str(crit_M_dens))
 
     new_overdensity_field = dens.copy()
     new_overdensity_field = new_overdensity_field.astype(np.float64)
     mass_field = (1 + new_overdensity_field) * crit_M_dens * (box_len / HII_dim * Mpc_to_m)**3 / (solar_mass) * (1 / (1 + np.mean(dens))) * (OMm-OMb)/OMm
 
     mass_field[dens < overdens_cap] = 0 # removing underdense regions
+    print("min mass of cell before halos " + str(np.min(mass_field[np.nonzero(mass_field)])))
 
     for i in range(np.max(labels)):
         current_halo = np.multiply((labels == (i+1)).astype(int), mass_field)

@@ -7,6 +7,7 @@ from abc import ABC, ABCMeta
 from scipy.stats import binned_statistic
 T_408 = 20
 lambda_21 = 0.21
+A_crit = 419000 / 512 # effective area of single station
 from astropy.cosmology import Planck18
 from postEoR.objects import Box, Ltcone
 from ska_ost_array_config.simulation_utils import simulate_observation
@@ -242,7 +243,7 @@ class Telescope(ABC):
     The base telescope class, upon which we may build the various stages of SKA-LOW. Cannot be directly instantiated.
     """
     def __init__(self):
-        self.fwhm21cm = 1.220 * lambda_21 / self.ddish # fwhm at 21cm in radians
+        self.fwhm21cm = lambda_21 / A_crit**0.5 # fwhm at 21cm in radians
         self.fov21cm = self.fwhm21cm**2 * self.nbeam # Field-of-view in steradians
 
     def fwhm_at_z(self, z): 
@@ -253,8 +254,11 @@ class Telescope(ABC):
         ----------
         z : float
             The redshift of the observation.
+        
+        1.220 * (1.+z) * (c / nu_21) / (0.8 * self.ddish)
         """
-        return 1.220 * (1.+z) * (c / nu_21) / (0.8 * self.ddish)
+
+        return (lambda_21 * (1+z) / A_crit**0.5) # from phil's paper
     
 
     def fov_at_z(self, z):
@@ -266,7 +270,7 @@ class Telescope(ABC):
         z : float
             The redshift of the observation.
         """
-        return self.fwhm_at_z(z)**2 
+        return self.fwhm_at_z(z)**2 * self.nbeam
     
 
     def z_to_f(self, z):
@@ -285,14 +289,19 @@ class Telescope(ABC):
 class SKA1LOW_AAstar(Telescope):
     """
     Instantiating the SKA-LOW telescope for the AA* stage.
+
+    Parameters
+    ----------
+    T_spl : float
+        The spillover temperature of the instrument, in K.
     """
     def __init__(self, T_spl):
         self.maxB = 73.4 # Maximum Baseline in km
-        self.area = 419000 * 307/512 # Total effective collecting area [m^2] CHECK
         self.ddish = 35. # diameter of a station, in m
         self.nbeam = 1 # number of beams
         self.npol = 2 # number of polarisations
         self.ndish = 307. # number of stations
+        self.area = 419000 * self.ndish/512 # Total effective collecting area [m^2] CHECK
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA*"
@@ -302,14 +311,19 @@ class SKA1LOW_AAstar(Telescope):
 class SKA1LOW_AA4(Telescope):
     """
     Instantiating the SKA-LOW telescope for the A4 stage.
+
+    Parameters
+    ----------
+    T_spl : float
+        The spillover temperature of the instrument, in K.
     """
     def __init__(self, T_spl):
         self.maxB = 73.4 # Maximum Baseline in km
-        self.area = 419000 # Total effective collecting area [m^2]
         self.ddish = 35. # diameter of a station, in m
         self.nbeam = 1 # number of beams
         self.npol = 2 # number of polarisations
         self.ndish = 512. # number of stations
+        self.area = 419000 * self.ndish/512 # Total effective collecting area [m^2] CHECK
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA4"
@@ -319,6 +333,11 @@ class SKA1LOW_AA4(Telescope):
 class SKA1LOW_AA05(Telescope):
     """
     Instantiating the SKA-LOW telescope for the AA0.5 stage.
+
+    Parameters
+    ----------
+    T_spl : float
+        The spillover temperature of the instrument, in K.
     """
     def __init__(self, T_spl):
         self.maxB = 73.4 # Maximum Baseline in km
@@ -326,6 +345,7 @@ class SKA1LOW_AA05(Telescope):
         self.nbeam = 1 # number of beams
         self.npol = 2 # number of polarisations
         self.ndish = 4. # number of stations
+        self.area = 419000 * self.ndish/512 # Total effective collecting area [m^2] CHECK
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA0.5"
@@ -335,14 +355,19 @@ class SKA1LOW_AA05(Telescope):
 class SKA1LOW_AA2(Telescope):
     """
     Instantiating the SKA-LOW telescope for the AA2 stage.
+
+    Parameters
+    ----------
+    T_spl : float
+        The spillover temperature of the instrument, in K.
     """
     def __init__(self, T_spl):
         self.maxB = 39.0 # Maximum Baseline in km
-        self.area = 419000 * 64/512 # Total effective collecting area [m^2] CHECK
         self.ddish = 35. # diameter of a station, in m
         self.nbeam = 1 # number of beams
         self.npol = 2 # number of polarisations
         self.ndish = 64. # number of stations
+        self.area = 419000 * self.ndish/512 # Total effective collecting area [m^2] CHECK
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA2"
@@ -355,11 +380,11 @@ class SKA1LOW_AA1(Telescope):
     """
     def __init__(self, T_spl):
         self.maxB = 73.4 # Maximum Baseline in km
-        self.area = 419000 * 16/512 # Total collecting area [m^2] CHECK
         self.ddish = 35. # diameter of a station, in m
         self.nbeam = 1 # number of beams
         self.npol = 2 # number of polarisations
         self.ndish = 16. # number of stations
+        self.area = 419000 * self.ndish/512 # Total effective collecting area [m^2] CHECK
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA1"
@@ -390,7 +415,7 @@ class Survey(Telescope):
         
         self.nk = 20 # number of k bins
 
-        self.aeffdish = get_A_eff(self.z_med, np.pi * (Telescope.ddish / 2.)**2) # Effective collecting area per station in m^2 
+        self.aeffdish = get_A_eff(self.z_med, A_crit) # Effective collecting area per station in m^2 | np.pi * (Telescope.ddish / 2.)**2
 
         self.aeff = get_A_eff(self.z_med, Telescope.area) # Total effective collecting area [m^2] CHECK
 
@@ -580,7 +605,7 @@ class Interferometer(Survey):
 
         u_vals = (uvw.u_wave**2 + uvw.v_wave**2)**0.5
 
-        bins = np.geomspace(20, 2000, 51)
+        bins = np.geomspace(20, 15000, 51)
 
         counts, _ = np.histogram(u_vals, bins)
 
@@ -605,6 +630,11 @@ class Interferometer(Survey):
         ----------
         lam : float (optional)
             The degree of smoothing applied to the spline creation. Defaults to 1e6.
+
+        Returns
+        -------
+        spl : BSpline object
+            The smoothed spline for the baseline density distribution.
         """
         spl = make_smoothing_spline(self.u, self.nvis, lam=lam)
 

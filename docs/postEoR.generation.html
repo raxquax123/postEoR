@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Python: module postEoR.generation</title>
+</head><body>
+
+<table class="heading">
+<tr class="heading-text decor">
+<td class="title">&nbsp;<br><strong class="title"><a href="postEoR.html" class="white">postEoR</a>.generation</strong></td>
+<td class="extra"><a href=".">index</a><br><a href="file:/Users/Rach/opt/anaconda3/envs/fast/lib/python3.11/site-packages/postEoR/generation.py">/Users/Rach/opt/anaconda3/envs/fast/lib/python3.11/site-packages/postEoR/generation.py</a></td></tr></table>
+    <p><span class="code">Functions&nbsp;to&nbsp;generate&nbsp;coeval&nbsp;boxes&nbsp;and&nbsp;lightcones&nbsp;containing&nbsp;the&nbsp;neutral&nbsp;hydrogen&nbsp;distribution&nbsp;in&nbsp;the&nbsp;redshift&nbsp;range&nbsp;6&nbsp;&gt;&nbsp;z&nbsp;&gt;&nbsp;3,&nbsp;using&nbsp;the&nbsp;outputs&nbsp;from&nbsp;21cmFAST&nbsp;as&nbsp;a&nbsp;base.</span></p>
+<p>
+<table class="section">
+<tr class="decor pkg-content-decor heading-text">
+<td class="section-title" colspan=3>&nbsp;<br><strong class="bigsection">Modules</strong></td></tr>
+    
+<tr><td class="decor pkg-content-decor"><span class="code">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td><td>&nbsp;</td>
+<td class="singlecolumn"><table><tr><td class="multicolumn"><a href="numpy.html">numpy</a><br>
+</td><td class="multicolumn"><a href="os.html">os</a><br>
+</td><td class="multicolumn"><a href="py21cmfast.html">py21cmfast</a><br>
+</td><td class="multicolumn"><a href="postEoR.tools.html">postEoR.tools</a><br>
+</td></tr></table></td></tr></table><p>
+<table class="section">
+<tr class="decor functions-decor heading-text">
+<td class="section-title" colspan=3>&nbsp;<br><strong class="bigsection">Functions</strong></td></tr>
+    
+<tr><td class="decor functions-decor"><span class="code">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td><td>&nbsp;</td>
+<td class="singlecolumn"><dl><dt><a name="-generate_box"><strong>generate_box</strong></a>(z: float, HII_dim=256, box_len=64, overdens_cap=1.686, connectivity=3, normalise_halos=True, max_rad=1, smooth=False, sigma=1) -&gt; postEoR.objects.Box</dt><dd><span class="code">Generates&nbsp;a&nbsp;coeval&nbsp;box&nbsp;at&nbsp;specified&nbsp;redshift&nbsp;using&nbsp;the&nbsp;base&nbsp;functionality&nbsp;of&nbsp;21cmFAST&nbsp;and&nbsp;post-processing&nbsp;functions&nbsp;in&nbsp;tools.py.<br>
+&nbsp;<br>
+Parameters<br>
+----------<br>
+z&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Redshift&nbsp;at&nbsp;which&nbsp;to&nbsp;produce&nbsp;the&nbsp;coeval&nbsp;box.<br>
+HII_dim&nbsp;:&nbsp;int&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;number&nbsp;of&nbsp;cells&nbsp;in&nbsp;each&nbsp;dimension&nbsp;of&nbsp;the&nbsp;box.<br>
+box_len&nbsp;:&nbsp;float&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;size&nbsp;of&nbsp;the&nbsp;box&nbsp;in&nbsp;Mpc&nbsp;/&nbsp;h.<br>
+overdens_cap&nbsp;:&nbsp;float&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;minimum&nbsp;overdensity&nbsp;required&nbsp;for&nbsp;a&nbsp;cell&nbsp;to&nbsp;be&nbsp;considered&nbsp;part&nbsp;of&nbsp;a&nbsp;halo.&nbsp;Defaults&nbsp;to&nbsp;1.686&nbsp;(Press-Schechter&nbsp;critical&nbsp;overdensity&nbsp;for&nbsp;collapse).<br>
+connectivity&nbsp;:&nbsp;int&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;connectivity&nbsp;parameter&nbsp;used&nbsp;in&nbsp;the&nbsp;watershed&nbsp;algorithm.&nbsp;Defaults&nbsp;to&nbsp;3&nbsp;(maximum).<br>
+normalise_halos&nbsp;:&nbsp;bool&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Whether&nbsp;to&nbsp;normalise&nbsp;the&nbsp;halo&nbsp;mass&nbsp;based&nbsp;on&nbsp;the&nbsp;overdensity&nbsp;cutoff&nbsp;for&nbsp;halo&nbsp;inclusion.&nbsp;Defaults&nbsp;to&nbsp;False.<br>
+max_rad&nbsp;:&nbsp;float&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;maximum&nbsp;radius,&nbsp;in&nbsp;Mpc/h,&nbsp;to&nbsp;calculate&nbsp;the&nbsp;HI&nbsp;density&nbsp;profile&nbsp;out&nbsp;to.&nbsp;Defaults&nbsp;to&nbsp;1.<br>
+&nbsp;<br>
+Returns<br>
+-------<br>
+box&nbsp;:&nbsp;Box&nbsp;object<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Object&nbsp;containing&nbsp;the&nbsp;BT,&nbsp;overdensity,&nbsp;and&nbsp;halo&nbsp;fields&nbsp;of&nbsp;the&nbsp;coeval&nbsp;box,&nbsp;in&nbsp;addition&nbsp;to&nbsp;defining&nbsp;information&nbsp;such&nbsp;as&nbsp;number&nbsp;of&nbsp;cells&nbsp;in&nbsp;each&nbsp;dimension&nbsp;and&nbsp;physical&nbsp;box&nbsp;length.<br>
+&nbsp;<br>
+Example&nbsp;usage<br>
+-------------<br>
+&gt;&gt;&gt;&nbsp;from&nbsp;postEoR&nbsp;import&nbsp;generation&nbsp;as&nbsp;gen<br>
+&gt;&gt;&gt;&nbsp;box&nbsp;=&nbsp;gen.<a href="#-generate_box">generate_box</a>(z=4,&nbsp;HII_dim=250,&nbsp;box_len=50,&nbsp;overdens_cap=0,&nbsp;use_watershed=True)<br>
+&gt;&gt;&gt;&nbsp;print(box)<br>
+&lt;postEoR.objects.Box&nbsp;object&nbsp;at&nbsp;0x199b7d690&gt;<br>
+&gt;&gt;&gt;&nbsp;print(box.cell_size())<br>
+0.2</span></dd></dl>
+ <dl><dt><a name="-generate_cone"><strong>generate_cone</strong></a>(z_centr: float, delta_z=0.5, HII_dim=200, box_len=400, overdens_cap=1.686, connectivity=3, normalise_halos=True, max_rad=1) -&gt; postEoR.objects.Ltcone</dt><dd><span class="code">Generates&nbsp;a&nbsp;lightcone&nbsp;using&nbsp;the&nbsp;base&nbsp;functionality&nbsp;of&nbsp;21cmFAST&nbsp;and&nbsp;post-processing&nbsp;functions&nbsp;in&nbsp;tools.py.<br>
+&nbsp;<br>
+Parameters<br>
+----------<br>
+z_centr&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;central&nbsp;redshift&nbsp;at&nbsp;which&nbsp;to&nbsp;evaluate&nbsp;the&nbsp;lightcone.<br>
+delta_z&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;size&nbsp;of&nbsp;the&nbsp;redshift&nbsp;range&nbsp;over&nbsp;which&nbsp;to&nbsp;evaluate&nbsp;the&nbsp;lightcone.&nbsp;Defaults&nbsp;to&nbsp;0.5.<br>
+HII_dim&nbsp;:&nbsp;int<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;number&nbsp;of&nbsp;cells&nbsp;in&nbsp;each&nbsp;spatial&nbsp;dimension&nbsp;of&nbsp;the&nbsp;lightcone.&nbsp;Defaults&nbsp;to&nbsp;200.<br>
+box_len&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;length&nbsp;in&nbsp;Mpc&nbsp;/&nbsp;h&nbsp;of&nbsp;each&nbsp;spatial&nbsp;dimension&nbsp;of&nbsp;the&nbsp;lightcone.&nbsp;Defaults&nbsp;to&nbsp;400.<br>
+overdens_cap&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;minimum&nbsp;overdensity&nbsp;required&nbsp;for&nbsp;a&nbsp;cell&nbsp;to&nbsp;be&nbsp;considered&nbsp;part&nbsp;of&nbsp;a&nbsp;halo.&nbsp;Defaults&nbsp;to&nbsp;1.686&nbsp;(Press-Schechter&nbsp;critical&nbsp;overdensity&nbsp;for&nbsp;collapse).<br>
+connectivity&nbsp;:&nbsp;int&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;connectivity&nbsp;parameter&nbsp;used&nbsp;in&nbsp;the&nbsp;watershed&nbsp;algorithm.&nbsp;Defaults&nbsp;to&nbsp;3&nbsp;(maximum).<br>
+normalise_halos&nbsp;:&nbsp;bool&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Whether&nbsp;to&nbsp;normalise&nbsp;the&nbsp;halo&nbsp;mass&nbsp;based&nbsp;on&nbsp;the&nbsp;overdensity&nbsp;cutoff&nbsp;for&nbsp;halo&nbsp;inclusion.&nbsp;Defaults&nbsp;to&nbsp;False.<br>
+max_rad&nbsp;:&nbsp;float&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;maximum&nbsp;radius,&nbsp;in&nbsp;Mpc/h,&nbsp;to&nbsp;calculate&nbsp;the&nbsp;HI&nbsp;density&nbsp;profile&nbsp;out&nbsp;to.&nbsp;Defaults&nbsp;to&nbsp;1.<br>
+&nbsp;<br>
+Returns<br>
+-------<br>
+ltcone&nbsp;:&nbsp;Ltcone&nbsp;object<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Object&nbsp;containing&nbsp;the&nbsp;BT,&nbsp;overdensity,&nbsp;and&nbsp;halo&nbsp;fields&nbsp;of&nbsp;the&nbsp;lightcone,&nbsp;in&nbsp;addition&nbsp;to&nbsp;defining&nbsp;information.<br>
+&nbsp;<br>
+Example&nbsp;usage<br>
+-------------<br>
+&gt;&gt;&gt;&nbsp;from&nbsp;postEoR&nbsp;import&nbsp;generation&nbsp;as&nbsp;gen<br>
+&gt;&gt;&gt;&nbsp;cone&nbsp;=&nbsp;gen.<a href="#-generate_cone">generate_cone</a>(z_centr=4,&nbsp;delta_z=0.4,&nbsp;HII_dim=250,&nbsp;box_len=400,&nbsp;overdens_cap=0,&nbsp;use_watershed=True)<br>
+&gt;&gt;&gt;&nbsp;print(cone)<br>
+&lt;postEoR.objects.Ltcone&nbsp;object&nbsp;at&nbsp;0x199b7d690&gt;<br>
+&gt;&gt;&gt;&nbsp;print(cone.cell_size())<br>
+1.6</span></dd></dl>
+</td></tr></table><p>
+<table class="section">
+<tr class="decor data-decor heading-text">
+<td class="section-title" colspan=3>&nbsp;<br><strong class="bigsection">Data</strong></td></tr>
+    
+<tr><td class="decor data-decor"><span class="code">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td><td>&nbsp;</td>
+<td class="singlecolumn"><strong>A_10</strong> = 2.86888e-15<br>
+<strong>Mpc_to_m</strong> = 3.0857e+22<br>
+<strong>OMl</strong> = 0.6903585584544936<br>
+<strong>OMm</strong> = 0.30964144154550644<br>
+<strong>c</strong> = 299792458<br>
+<strong>cosmo_params</strong> = CosmoParams(OMb:0.04897, OMm:0.3096, POWER_INDEX:0.9665, SIGMA_8:0.8102, hlittle:0.6766)<br>
+<strong>h</strong> = 6.63e-34<br>
+<strong>hlittle</strong> = 0.6766<br>
+<strong>k_B</strong> = 1.380649e-23<br>
+<strong>m_H</strong> = 1.6735e-27<br>
+<strong>nu_21</strong> = 1420405751.7680001<br>
+<strong>solar_mass</strong> = 1.9890000000000002e+30</td></tr></table>
+</body></html>

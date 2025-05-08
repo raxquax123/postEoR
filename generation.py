@@ -22,9 +22,12 @@ def generate_box(
     z : float, 
     HII_dim=256, 
     box_len=64,
-    overdens_cap=1.686,
+    overdens_cap=None,
     connectivity=3,
     normalise_halos=True,
+    max_rad=1,
+    smooth=False,
+    sigma=0.5,
 ) -> Box:
     """
     Generates a coeval box at specified redshift using the base functionality of 21cmFAST and post-processing functions in tools.py.
@@ -38,11 +41,13 @@ def generate_box(
     box_len : float (optional)
         The size of the box in Mpc / h.
     overdens_cap : float (optional)
-        The minimum overdensity required for a cell to be considered part of a halo. Defaults to 1.686 (Press-Schechter critical overdensity for collapse).
-    connectivity : float (optional)
+        The minimum overdensity required for a cell to be considered part of a halo. Defaults to None (applies simple linear approximation to optimal overdens_cap based on matching to theoretical HMF).
+    connectivity : int (optional)
         The connectivity parameter used in the watershed algorithm. Defaults to 3 (maximum).
     normalise_halos : bool (optional)
         Whether to normalise the halo mass based on the overdensity cutoff for halo inclusion. Defaults to False.
+    max_rad : float (optional)
+        The maximum radius, in Mpc/h, to calculate the HI density profile out to. Defaults to 1.
 
     Returns
     -------
@@ -70,13 +75,18 @@ def generate_box(
     )
     ionized_field = p21c.ionize_box(perturbed_field = perturbed_field) # export neutral fraction from 21cmFAST (EoR bubbles)
     dens = getattr(perturbed_field, "density") # export overdensity field for use in post-processing
-    halos = tools.find_halos_watershed(dens, box_len, HII_dim, overdens_cap=overdens_cap, connectivity=connectivity, normalise=normalise_halos)
-    HI_distr = tools.get_HI_field(halos, z, box_len, HII_dim) # obtain the neutral hydrogen distribution, given a halo field and the redshift of evaluation
+
+    if overdens_cap is None:
+        overdens_cap = -54.7 * box_len / HII_dim + 16.75 # simple linear approximation to the optimal overdens cap to match hmf to theoretical
+        print("Optimal overdensity cap used is " + str(overdens_cap))
+    
+    halos = tools.find_halos_watershed(dens, box_len, HII_dim, overdens_cap=overdens_cap, connectivity=connectivity, normalise=normalise_halos, smooth=smooth, sigma=sigma)
+    HI_distr = tools.get_HI_field(halos, z, box_len, HII_dim, max_rad=max_rad) # obtain the neutral hydrogen distribution, given a halo field and the redshift of evaluation
 
     H_0 = hlittle * 100
     BT_21c = p21c.brightness_temperature(ionized_box=ionized_field, perturbed_field=perturbed_field) # calculate 21cm bt from 21cmFAST - eor / neutral igm contribution
     HI_dens = HI_distr * solar_mass / (box_len / HII_dim * Mpc_to_m)**3 # calculate \rho_{HI} in kg/m^3 h^2
-    BT = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+z)**2 / ((H_0*1000/Mpc_to_m)*(OMm*(1+z)**3+OMl)**0.5)) * HI_dens * hlittle**2 # bt formula from wolz et al. 2017, removing h-agnosticity as now looking at observable
+    BT = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+z)**2 / ((H_0 * 1000 / Mpc_to_m) * (OMm * (1+z)**3+OMl)**0.5)) * HI_dens * hlittle**2 # bt formula from wolz et al. 2017, removing h-agnosticity as now looking at observable
     BT_EoR = getattr(BT_21c, "brightness_temp")  # getting bt from neutral igm (pre-reionization)
     BT_fin = np.maximum(BT, BT_EoR) # avoiding 'double-counting' of bt from post-processing and 21cmFAST
     box = Box(z, box_len, HII_dim, dens, halos, BT_fin)
@@ -90,8 +100,10 @@ def generate_cone(
     delta_z=0.5, 
     HII_dim=200, 
     box_len=400,
-    overdens_cap=1.686,
+    overdens_cap=None,
     connectivity=3,
+    normalise_halos=True,
+    max_rad=1,
 ) -> Ltcone: 
     """
     Generates a lightcone using the base functionality of 21cmFAST and post-processing functions in tools.py.
@@ -107,7 +119,13 @@ def generate_cone(
     box_len : float
         The length in Mpc / h of each spatial dimension of the lightcone. Defaults to 400.
     overdens_cap : float
-        The minimum overdensity required for a cell to be considered part of a halo. Defaults to 1.686 (Press-Schechter critical overdensity for collapse).
+        The minimum overdensity required for a cell to be considered part of a halo. Defaults to None (applies simple linear approximation to optimal overdens_cap based on matching to theoretical HMF).
+    connectivity : int (optional)
+        The connectivity parameter used in the watershed algorithm. Defaults to 3 (maximum).
+    normalise_halos : bool (optional)
+        Whether to normalise the halo mass based on the overdensity cutoff for halo inclusion. Defaults to False.
+    max_rad : float (optional)
+        The maximum radius, in Mpc/h, to calculate the HI density profile out to. Defaults to 1.
 
     Returns
     -------
@@ -128,8 +146,8 @@ def generate_cone(
     HII_DIM=HII_dim, BOX_LEN=box_len, KEEP_3D_VELOCITIES=True, USE_2LPT=True, HMF=3
 )
     # defining the redshift bounds
-    min_redshift=z_centr - delta_z / 2
-    max_redshift=z_centr + delta_z / 2
+    min_redshift=z_centr-delta_z / 2
+    max_redshift=z_centr+delta_z / 2
 
     # set up lightconer class
     lcn = p21c.RectilinearLightconer.with_equal_cdist_slices(
@@ -150,14 +168,18 @@ def generate_cone(
     BT_EoR_ltcone = getattr(lightcone, "brightness_temp") # getting the bt from the pre-reionization neutral igm
     dens_ltcone = getattr(lightcone, "density") # getting density for post-processing
 
-    halos_ltcone = tools.find_halos_watershed(dens_ltcone, box_len, HII_dim, overdens_cap=overdens_cap, connectivity=connectivity)
+    if overdens_cap is None:
+        overdens_cap = -54.7 * box_len / HII_dim + 16.75 # simple linear approximation to the optimal overdens cap to match hmf to theoretical
+        print("Optimal overdensity cap used is " + str(overdens_cap))
+
+    halos_ltcone = tools.find_halos_watershed(dens_ltcone, box_len, HII_dim, overdens_cap=overdens_cap, connectivity=connectivity, normalise=normalise_halos)
 
     redshift = (min_redshift+max_redshift) / 2 # taking the mean redshift of the lightcone to use in evaluating the BT
-    HI_ltcone = tools.get_HI_field(halos_ltcone, redshift, box_len, HII_dim, no_bins=25, max_rad=5) # find the hi field on the lightcone
+    HI_ltcone = tools.get_HI_field(halos_ltcone, redshift, box_len, HII_dim, no_bins=25, max_rad=max_rad) # find the hi field on the lightcone
 
     H_0 = hlittle * 100
     HI_dens = HI_ltcone * solar_mass / (box_len / HII_dim * Mpc_to_m)**3 # calculate \rho_{HI} in kg/m^3
-    BT_HI_ltcone = (3 * h * c**3 * A_10)/(32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+redshift)**2 / ((H_0*1000/Mpc_to_m)*(OMm*(1+redshift)**3+OMl)**0.5)) * HI_dens / hlittle**2 # bt formula from wolz et al. 2017, removing h-agnosticity as now looking at observable
+    BT_HI_ltcone = (3 * h * c**3 * A_10) / (32 * np.pi * m_H * k_B * (nu_21)**2) * ((1+redshift)**2 / ((H_0 * 1000 / Mpc_to_m) * (OMm * (1+redshift)**3+OMl)**0.5)) * HI_dens / hlittle**2 # bt formula from wolz et al. 2017, removing h-agnosticity as now looking at observable
     BT_ltcone = np.maximum(BT_HI_ltcone, BT_EoR_ltcone)
 
     # set up Ltcone object, containing the post-EoR data

@@ -97,13 +97,13 @@ def plot_colormaps(
     y1, x1 = np.mgrid[slice(dy / 2, fin_size, dy), slice(dx / 2, fin_size, dx)]
 
     # plotting colormaps of overdensity, neutral fraction, brightness temperature
-    cb1 = ax1.pcolormesh(x1, y1, dens[:, :, 10], cmap = "viridis")
+    cb1 = ax1.pcolormesh(x1, y1, dens[:, :, 10], cmap = "magma")
     ax1.set_xlabel('$x$, Mpc/h')
     ax1.set_ylabel('$y$, Mpc/h')
     cbar1 = fig.colorbar(cb1)
     cbar1.set_label('Overdensity', rotation=270, labelpad = 12)
 
-    cb3 = ax3.pcolormesh(x1, y1, BT[:, :, 10], cmap = "viridis")
+    cb3 = ax3.pcolormesh(x1, y1, BT[:, :, 10], cmap = "magma")
     ax3.set_xlabel('$x$, Mpc/h')
     cbar3 = fig.colorbar(cb3)
     cbar3.set_label('Brightness temperature, mK', rotation=270, labelpad = 12)

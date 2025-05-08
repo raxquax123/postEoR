@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Python: module postEoR.plotting</title>
+</head><body>
+
+<table class="heading">
+<tr class="heading-text decor">
+<td class="title">&nbsp;<br><strong class="title"><a href="postEoR.html" class="white">postEoR</a>.plotting</strong></td>
+<td class="extra"><a href=".">index</a><br><a href="file:/Users/Rach/opt/anaconda3/envs/fast/lib/python3.11/site-packages/postEoR/plotting.py">/Users/Rach/opt/anaconda3/envs/fast/lib/python3.11/site-packages/postEoR/plotting.py</a></td></tr></table>
+    <p><span class="code">Plotting&nbsp;functions&nbsp;for&nbsp;outputs&nbsp;and&nbsp;analysis&nbsp;objects.</span></p>
+<p>
+<table class="section">
+<tr class="decor pkg-content-decor heading-text">
+<td class="section-title" colspan=3>&nbsp;<br><strong class="bigsection">Modules</strong></td></tr>
+    
+<tr><td class="decor pkg-content-decor"><span class="code">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td><td>&nbsp;</td>
+<td class="singlecolumn"><table><tr><td class="multicolumn"><a href="numpy.html">numpy</a><br>
+</td><td class="multicolumn"><a href="matplotlib.pyplot.html">matplotlib.pyplot</a><br>
+</td><td class="multicolumn"></td><td class="multicolumn"></td></tr></table></td></tr></table><p>
+<table class="section">
+<tr class="decor functions-decor heading-text">
+<td class="section-title" colspan=3>&nbsp;<br><strong class="bigsection">Functions</strong></td></tr>
+    
+<tr><td class="decor functions-decor"><span class="code">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td><td>&nbsp;</td>
+<td class="singlecolumn"><dl><dt><a name="-plot_colormaps"><strong>plot_colormaps</strong></a>(BT, dens, z: float, HII_dim: float, box_len: float, save_loc: str)</dt><dd><span class="code">Plot&nbsp;and&nbsp;save&nbsp;colormaps&nbsp;of&nbsp;a&nbsp;slice&nbsp;of&nbsp;the&nbsp;field,&nbsp;for&nbsp;the&nbsp;brightness&nbsp;temperature&nbsp;and&nbsp;overdensity.<br>
+&nbsp;<br>
+Parameters<br>
+----------<br>
+BT&nbsp;:&nbsp;NDarray<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;brightness&nbsp;temperature&nbsp;field.<br>
+dens&nbsp;:&nbsp;NDarray<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;overdensity&nbsp;field.<br>
+z&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;redshift&nbsp;at&nbsp;which&nbsp;the&nbsp;fields&nbsp;were&nbsp;evaluated.<br>
+HII_dim&nbsp;:&nbsp;int<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;number&nbsp;of&nbsp;cells&nbsp;in&nbsp;each&nbsp;of&nbsp;the&nbsp;spatial&nbsp;dimensions&nbsp;of&nbsp;the&nbsp;box&nbsp;/&nbsp;cone.<br>
+box_len&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;physical&nbsp;length&nbsp;of&nbsp;each&nbsp;of&nbsp;the&nbsp;spatial&nbsp;dimensions&nbsp;of&nbsp;the&nbsp;box&nbsp;/&nbsp;cone,&nbsp;in&nbsp;Mpc.&nbsp;<br>
+save_loc&nbsp;:&nbsp;str<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;path&nbsp;and&nbsp;filename&nbsp;for&nbsp;the&nbsp;plot&nbsp;to&nbsp;be&nbsp;saved&nbsp;to.</span></dd></dl>
+ <dl><dt><a name="-plot_lightcone"><strong>plot_lightcone</strong></a>(lightcone, lightcone_item, save_loc: str, title: str, label='Brightness temperature, mK')</dt><dd><span class="code">Plot&nbsp;and&nbsp;save&nbsp;the&nbsp;redshift&nbsp;evolution&nbsp;of&nbsp;a&nbsp;given&nbsp;quantity&nbsp;of&nbsp;the&nbsp;lightcone&nbsp;(e.g.&nbsp;brightness&nbsp;temperature,&nbsp;density).<br>
+&nbsp;<br>
+Parameters<br>
+----------<br>
+lightcone&nbsp;:&nbsp;Lightconer&nbsp;class<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;lightcone&nbsp;class&nbsp;object&nbsp;output&nbsp;by&nbsp;21cmFAST.<br>
+lightcone_item&nbsp;:&nbsp;NDarray<br>
+&nbsp;&nbsp;&nbsp;&nbsp;Contains&nbsp;the&nbsp;3D&nbsp;distribution&nbsp;of&nbsp;the&nbsp;quantity&nbsp;to&nbsp;be&nbsp;plot&nbsp;(output&nbsp;by&nbsp;the&nbsp;functions&nbsp;in&nbsp;generation.py).<br>
+save_loc&nbsp;:&nbsp;str<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;path&nbsp;and&nbsp;filename&nbsp;for&nbsp;the&nbsp;plot&nbsp;to&nbsp;be&nbsp;saved&nbsp;to.<br>
+label&nbsp;:&nbsp;str&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;label&nbsp;to&nbsp;be&nbsp;put&nbsp;on&nbsp;the&nbsp;colorbar&nbsp;on&nbsp;the&nbsp;plot&nbsp;(defaults&nbsp;to&nbsp;brightness&nbsp;temperature&nbsp;in&nbsp;mK&nbsp;if&nbsp;no&nbsp;input&nbsp;given).<br>
+title&nbsp;:&nbsp;str&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;title&nbsp;of&nbsp;the&nbsp;plot.</span></dd></dl>
+ <dl><dt><a name="-plot_mfs"><strong>plot_mfs</strong></a>(counts, bins, los_dist: float, box_len: float, z: float, save_loc: str, title: str, color='tab:blue')</dt><dd><span class="code">Plot&nbsp;and&nbsp;save&nbsp;the&nbsp;mass&nbsp;functions&nbsp;output&nbsp;by&nbsp;the&nbsp;get_hmf,&nbsp;get_himf&nbsp;functions.<br>
+&nbsp;<br>
+Parameters<br>
+----------<br>
+counts&nbsp;:&nbsp;NDarray<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;number&nbsp;of&nbsp;objects&nbsp;falling&nbsp;in&nbsp;each&nbsp;halo&nbsp;mass&nbsp;bin.<br>
+bins&nbsp;:&nbsp;NDarray<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;mass&nbsp;bins&nbsp;used&nbsp;to&nbsp;create&nbsp;the&nbsp;HMF.<br>
+los_dist&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;physical&nbsp;distance&nbsp;corresponding&nbsp;to&nbsp;the&nbsp;redshift&nbsp;interval&nbsp;the&nbsp;lightcone&nbsp;is&nbsp;generated&nbsp;over.<br>
+box_len&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;physical&nbsp;length&nbsp;of&nbsp;the&nbsp;spatial&nbsp;dimensions&nbsp;of&nbsp;the&nbsp;box&nbsp;/&nbsp;lightcone.<br>
+z&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;redshift&nbsp;at&nbsp;which&nbsp;the&nbsp;mass&nbsp;function&nbsp;was&nbsp;evaluated.<br>
+save_loc&nbsp;:&nbsp;str<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;path&nbsp;and&nbsp;filename&nbsp;for&nbsp;the&nbsp;plot&nbsp;to&nbsp;be&nbsp;saved&nbsp;to.<br>
+title&nbsp;:&nbsp;str&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;title&nbsp;of&nbsp;the&nbsp;plot.<br>
+color&nbsp;:&nbsp;str&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;desired&nbsp;color&nbsp;of&nbsp;the&nbsp;plot.</span></dd></dl>
+ <dl><dt><a name="-plot_ps"><strong>plot_ps</strong></a>(ps, k, z: float, linestyle: str, ax, label: str, save_loc: str, title: str, color='tab:blue')</dt><dd><span class="code">Plot&nbsp;and&nbsp;save&nbsp;power&nbsp;spectra.<br>
+&nbsp;<br>
+Parameters<br>
+----------<br>
+ps&nbsp;:&nbsp;NDarray<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;power&nbsp;spectrum.<br>
+k&nbsp;:&nbsp;NDarray<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;k&nbsp;values&nbsp;corresponding&nbsp;to&nbsp;the&nbsp;power&nbsp;spectrum<br>
+z&nbsp;:&nbsp;float<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;redshift&nbsp;at&nbsp;which&nbsp;the&nbsp;power&nbsp;spectrum&nbsp;was&nbsp;evaluated.<br>
+linestyle&nbsp;:&nbsp;str<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;desired&nbsp;linestyle&nbsp;of&nbsp;the&nbsp;plot.<br>
+ax&nbsp;:&nbsp;Axes&nbsp;object<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;axis&nbsp;on&nbsp;which&nbsp;to&nbsp;plot&nbsp;the&nbsp;power&nbsp;spectra.<br>
+label&nbsp;:&nbsp;str<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;label&nbsp;of&nbsp;the&nbsp;item&nbsp;being&nbsp;plotted<br>
+save_loc&nbsp;:&nbsp;str<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;path&nbsp;and&nbsp;filename&nbsp;for&nbsp;the&nbsp;plot&nbsp;to&nbsp;be&nbsp;saved&nbsp;to.<br>
+title&nbsp;:&nbsp;str&nbsp;<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;title&nbsp;of&nbsp;the&nbsp;plot.<br>
+color&nbsp;:&nbsp;str&nbsp;(optional)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;The&nbsp;desired&nbsp;color&nbsp;of&nbsp;the&nbsp;plot.</span></dd></dl>
+</td></tr></table><p>
+<table class="section">
+<tr class="decor data-decor heading-text">
+<td class="section-title" colspan=3>&nbsp;<br><strong class="bigsection">Data</strong></td></tr>
+    
+<tr><td class="decor data-decor"><span class="code">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></td><td>&nbsp;</td>
+<td class="singlecolumn"><strong>OMm</strong> = 0.30964144154550644<br>
+<strong>hlittle</strong> = 0.6766</td></tr></table>
+</body></html>
