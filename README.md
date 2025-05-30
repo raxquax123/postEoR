@@ -1,7 +1,7 @@
 # postEoR
 
 # Install requirements
-* py21cmfast
+* py21cmfast v3.4.0
 * scipy
 * numpy
 * skimage
