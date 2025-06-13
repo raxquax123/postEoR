@@ -11,7 +11,7 @@ import py21cmfast as p21c
 OMm = 0.30964144154550644
 OMb = 0.04897468161869667
 hlittle = 67.66 / 100
-cosmo_params = p21c.CosmoParams(hlittle=hlittle, OMm=OMm, OMb=OMb) # adding cosmology used to 21cmFAST.
+cosmo_params = p21c.CosmoParams.new(hlittle=hlittle, OMm=OMm, OMb=OMb) # adding cosmology used to 21cmFAST.
 OMl = 1 - OMm # assuming a flat cosmology - as is done by 21cmFAST.
 
 """ Defining physical constants. """
@@ -314,7 +314,7 @@ def create_spherical_profile(halo, z, box_len, HII_dim, max_rad=1):
     return sph_prof_fin
 
 
-def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=None, connectivity=3, compactness=0, normalise=True, smooth=False, sigma=1):
+def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=None, connectivity=1, compactness=0, normalise=False, smooth=False, sigma=1):
     """
     Returns mass and centre position of halos in solar masses. 
     Stops at either no change after algorithm applied, or when maximum number of iterations has been reached.
@@ -330,17 +330,24 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=None, connectivity
     overdens_cap : float (optional)
         The minimum overdensity for which a cell is considered to be associated with a halo. Defaults to None (applies simple linear approximation to optimal overdens_cap based on matching to theoretical HMF).
     connectivity : float (optional)
-        The neighbour connectivity parameter used in the watershed algorithm. Defaults to 3 (maximum - going beyond this doesn't change the halos).
+        The neighbour connectivity parameter used in the watershed algorithm. Defaults to 1 (3 is maximum - going beyond this doesn't change the halos).
     compactness : float (optional)
         The object compactness parameter used in the watershed algorithm. Defaults to 1.
-
+    normalise : bool (optional)
+        Whether or not to approximate halo merging by normalising the total halo mass based on the overdensity cap (to account for otherwise 'lost'/unresolved halos). Defaults to False.
+    smooth : bool (optional)
+        Whether or not to apply Gaussian smoothing to the overdensity field before halo finding on it (here for testing purposes). Defaults to False.
+    sigma : float (optional)
+        The degree of Gaussian smoothing applied to the overdensity field before halo finding on it. Only functional if smooth=True. Defaults to 1.
+        
     Returns 
     -------
     halo_field : NDarray
         The distribution of halo masses across the field, in solar masses/h.
     """
     if overdens_cap is None:
-        overdens_cap = -54.7 * box_len / HII_dim + 16.75 # simple linear approximation to the optimal overdens cap to match hmf to theoretical
+        #overdens_cap = -54.7 * box_len / HII_dim + 16.75 # simple linear approximation to the optimal overdens cap to match hmf to theoretical
+        overdens_cap = 8 * (0.16 / (box_len / HII_dim))
         print("Optimal overdensity cap used is " + str(overdens_cap))
 
     image = dens.copy()
@@ -384,3 +391,31 @@ def find_halos_watershed(dens, box_len, HII_dim, overdens_cap=None, connectivity
     halo_field[halo_field < 10**7] = 0 # removing small mass regions that are unlikely to be halos
     
     return halo_field
+
+
+def get_vel_grad(vel, HII_dim, box_len, axis=2): # returns dv/dr (taking r along the specified axis) | input: velocity field corresponding to known box size
+    """
+    Calculate the velocity gradient along a given axis. Used in calculating the effects of RSDs.
+
+    Parameters
+    ----------
+    vel : NDarray
+        The velocity field output by 21cmFAST.
+    HII_dim : int
+        The number of cells along the spatial directions of the field.
+    box_len : float
+        The physical length along the spatial dimensions of the field, in Mpc/h.
+    axis : int (optional)
+        The axis along which the velocity gradient is to be calculated. Valid options are 0, 1, 2. Defaults to 2 (generally the LoS axis).
+
+    Returns
+    -------
+    grad : NDarray
+        The velocity gradient field.
+    """
+    dv = np.empty((HII_dim, HII_dim, HII_dim))
+    dr = box_len / HII_dim
+    dv = np.roll(vel, 1, int(axis)) - vel
+    grad = dv / dr
+
+    return grad

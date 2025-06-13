@@ -8,6 +8,7 @@ import postEoR.tools as tools
 from postEoR.tools import hlittle, OMm, OMl
 import matplotlib.pyplot as plt
 plt.rcParams.update({'font.size': 15})
+import gc
 
 
 def get_PS(x, box_len, HII_dim, kbins=None, remove_nan=True): 
@@ -109,6 +110,7 @@ def get_dimless_PS(x, box_len, HII_dim:int, kbins=None, remove_nan=True):
     error1 *= new_k**3 / (2 * np.pi**2) 
 
     return new_k, plot1, error1
+
 
 def get_distance(z_start, z_end=0):
     """
@@ -255,9 +257,22 @@ def gen_himf(z, HII_dim, box_len, set_bins=True):
     return bins, counts, los_dist
 
 
-def flatten(x, axis): # takes all the values along a given axis and sums them (essentially flattening along one dimension)
+def flatten(x, axis):
     """
-    
+    Takes all the cells along a given axis and sums them, essentially flattening the field along one dimension.
+
+    Parameters
+    ----------
+    x : NDarray
+        The field to be flattened.
+    axis : int
+        The axis along which the field is flattened.
+
+    Returns
+    -------
+    flat : NDarray
+        The flattened field.
+
     """
     dims = np.shape(x)
     if axis == 0:
@@ -294,6 +309,8 @@ def reduce_res(reduction_factor, object):
 
     Returns
     -------
+    binned_fin : NDarray
+        The reduced-resolution field.
     """
     if reduction_factor >= object.HII_dim:
         print("Reduction factor too large.")
@@ -349,12 +366,149 @@ def get_clustering_ps(x, box_len, HII_dim, kbins=None, remove_nan=True):
 
     Parameters
     ----------
+    x : NDarray
+        The field whose clustering power spectrum is to be calculated.
+    box_len : float
+        The physical length of each of the spatial dimensions of the box / cone, in Mpc/h. 
+    HII_dim : int
+        The number of cells in each of the spatial dimensions of the box / cone.
+    kbins : NumPy array (optional)
+        The wavenumber bins to use in binning the power. If none / invalid bins are provided, bins will be generated automatically based on the minimum and maximum wavenumber and the number of cells in each dimension.
+    remove_nan : bool (optional)
+        Whether to remove NaN values from the binned power spectrum (need to keep if calculating the ratio between two power spectra). Defaults to True.
 
+    Returns
+    -------
+    k : NumPy array
+        The wavenumbers corresponding to the power spectrum.
+    ps : NumPy array
+        The power spectrum of the input field x.
+    err : NumPy array
+        The error in each bin of the power spectrum.
     """
     y = x.copy()
-    y[y>0] = 1
-    y[y<0] = 0
+    y[y > 0] = 1
+    y[y < 0] = 0
     y /= np.mean(y)
     k, ps, err = get_PS(y, box_len, HII_dim, kbins, remove_nan)
 
     return k, ps, err
+
+
+def get_2d_ps(x, box_len, HII_dim, kbins=None, remove_nan=True, save_fig=True):
+    """
+    Calculates the cylindrical power spectrum of the field.
+
+    Parameters
+    ----------
+    x : NDarray
+        The field whose clustering power spectrum is to be calculated.
+    box_len : float
+        The physical length of each of the spatial dimensions of the box / cone, in Mpc/h. 
+    HII_dim : int
+        The number of cells in each of the spatial dimensions of the box / cone.
+    kbins : NumPy array (optional)
+        The wavenumber bins to use in binning the power. If none / invalid bins are provided, bins will be generated automatically based on the minimum and maximum wavenumber and the number of cells in each dimension.
+    remove_nan : bool (optional)
+        Whether to remove NaN values from the binned power spectrum (need to keep if calculating the ratio between two power spectra). Defaults to True.
+
+    Returns
+    -------
+    cross : NDarray
+    kvals : NDarray
+    """
+    y = x.copy()
+
+    dims = np.shape(y)
+    plt.rcParams['figure.figsize'] = [11, 10]
+
+    power0 = np.fft.fftn(flatten(y, 0))
+    power1 = np.fft.fftn(flatten(y, 1))
+    power2 = np.fft.fftn(flatten(y, 2))
+
+    del y
+    gc.collect()
+
+    perp = (np.abs(power1)**2 + np.abs(power2)**2)**2
+    perp = perp.reshape(np.size(perp)) / (np.size(perp) * (HII_dim / box_len)**3) # normalising by sampling volume
+    para = np.abs(power0)**2
+    para = para.reshape(np.size(para)) / (np.size(para) * (HII_dim / box_len)**3)
+
+    ksx = np.fft.fftfreq(dims[0], (box_len / HII_dim)) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
+    ksy = np.fft.fftfreq(dims[1], (box_len / HII_dim)) * 2 * np.pi
+    ksz = np.fft.fftfreq(dims[2], (box_len / HII_dim)) * 2 * np.pi
+    kx, ky, kz = np.meshgrid(ksx, ksy, ksz) # converting to a 3d array
+    k = (kx**2+ky**2+kz**2)**0.5 # spherical k-values
+    k = k.reshape(np.size(k)) # converting to 1d array for use in binned_statistic
+    try: # check for input bins, and generate if none / invalid provided
+        if kbins is None:
+            kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1) # sampling in log space - defining bin edges
+            print("Generated bins.")
+        else:
+            print("Using input bins")
+    except AttributeError:
+        print("Incorrect bin type. Generating bins")
+        kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1)
+
+    Abins1, _, _ = stats.binned_statistic(k, perp, statistic = "mean", bins = kbins)
+    Abins2, _, _ = stats.binned_statistic(k, para, statistic = "mean", bins = kbins)
+
+    kvals = ((kbins[1:] + kbins[:-1])) / 2
+
+    cross = np.zeros([np.size(Abins1), np.size(Abins2)])
+    for i in range(np.size(Abins1)):
+        for j in range(np.size(Abins2)):
+            cross[i,j] = Abins1[i] * Abins2[j]
+
+    if save_fig:
+        fig, ax = plt.subplots(1,1)
+        cb = ax.pcolormesh(np.log(kvals), np.log(kvals), np.log(cross), cmap = "viridis")
+        ax.set_xlabel("log(k$_{\perp}$, (h Mpc)$^{-1}$)")
+        ax.set_ylabel("log(k$_\|$, (h Mpc)$^{-1}$)")
+        cbar = fig.colorbar(cb)
+        cbar.set_label("log(P$_{cross}$, (mK)$^2$)")
+        plt.savefig("cross_ps.png")
+    
+    return cross, kvals
+
+
+def len_to_ang(len, z):
+    """
+    Converts from spatial size to angular size, assuming small angle approximation.
+
+    Parameters
+    ----------
+    box_len : float
+        The spatial size to be converted, in Mpc/h.
+    z : float
+        The redshift of observation.
+
+    Returns
+    -------
+    ang : float
+        The angular size corresponding to the input spatial size and redshift, in degrees.
+    """
+    ang = len / get_distance(z) * 180 / np.pi
+
+    return ang
+
+
+def ang_to_len(ang, z):
+    """
+    Converts from angular size to spatial size, assuming small angle approximation.
+
+    Parameters
+    ----------
+    ang : float
+        The angular size to be converted, in degrees.
+    z : float
+        The redshift of observation.
+
+    Returns
+    -------
+    len : float
+        The spatial size corresponding to the input angular size and redshift, in Mpc/h.
+    """
+    len = np.pi / 180 * get_distance(z) * ang
+
+    return len

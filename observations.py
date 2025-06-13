@@ -1,7 +1,7 @@
 """ Functions to generate noise and other observational effects on the field. """
 
 import numpy as np
-from postEoR.tools import nu_21, h, k_B, T_CMB, c, hlittle, OMm, OMl, Mpc_to_m
+from postEoR.tools import nu_21, h, k_B, T_CMB, c, hlittle, OMm, OMl
 from postEoR.analysis import get_distance
 from abc import ABC, ABCMeta
 from scipy.stats import binned_statistic
@@ -19,6 +19,11 @@ from ska_ost_array_config.array_config import LowSubArray
 from ska_ost_array_config.UVW import plot_uv_coverage
 from scipy.interpolate import make_smoothing_spline
 import matplotlib.pyplot as plt
+import os
+import hickle
+
+if not os.path.exists('_cache'):
+    os.mkdir('_cache')
 
 
 
@@ -245,6 +250,8 @@ class Telescope(ABC):
     def __init__(self):
         self.fwhm21cm = lambda_21 / A_crit**0.5 # fwhm at 21cm in radians
         self.fov21cm = self.fwhm21cm**2 * self.nbeam # Field-of-view in steradians
+        self.gen_nvis()
+        print("initialised!")
 
     def fwhm_at_z(self, z): 
         """
@@ -283,6 +290,54 @@ class Telescope(ABC):
             The redshift of the observation.
         """
         return nu_21 / (1. + z)
+    
+
+    def gen_nvis(self):
+        """
+        Generates the baseline separation number density for a given interferometric array, and assigns it and the baseline separation to the telescope.
+        """
+
+        if os.path.exists('_cache/' + str(self.stage) + '.hkl'):
+            [self.D, self.nvisD, self.dD] = hickle.load('_cache/' + str(self.stage) + '.hkl')
+        else:
+            # Target coordinate - Polaris Australis
+            phase_centre = SkyCoord("21:08:46.8 -88:57:23.4", unit=(units.hourangle, units.deg)) # random pointing used for generating |u| - not fussed abt arg of uv dist
+
+            # Start time of the observation
+            start_time = Time("2024-09-25T03:23:21.6", format='isot', scale='utc') # as above
+
+            observation = simulate_observation(
+                array_config=LowSubArray(subarray_type=self.stage).array_config,
+                phase_centre=phase_centre,
+                start_time=start_time,
+                duration=120,
+                integration_time=5,
+                ref_freq=nu_21,
+                n_chan=1,
+                horizon=0,
+            )
+
+            uvw = UVW.UVW(observation, ignore_autocorr=False)
+
+            u_vals = (uvw.u_wave**2 + uvw.v_wave**2)**0.5
+
+            bins = np.geomspace(np.min(u_vals[np.nonzero(u_vals)]), np.max(u_vals), 51)
+
+            counts, _ = np.histogram(u_vals, bins)
+
+            self.D = (bins[1:] + bins[:-1]) * lambda_21 / 2 # converting to baseline separation from u coord, for general use in diff surveys
+
+            self.nvisD = counts.astype(float)
+
+            self.dD = (bins[1:] - bins[:-1]) * lambda_21
+
+            self.nvisD /= self.dD * self.D * 2 * np.pi
+
+            sumn = 2. * np.pi * sum(self.nvisD * self.D * self.dD) # numerical approximation to the half plane integral
+
+            self.nvisD *= (0.5 * self.ndish * (self.ndish-1.)) / sumn # this normalises the half plane integral to the total number of baseline pairs
+
+            hickle.dump([self.D, self.nvisD, self.dD], '_cache/' + str(self.stage) + '.hkl')
 
 
 
@@ -305,6 +360,7 @@ class SKA1LOW_AAstar(Telescope):
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA*"
+        Telescope.__init__(self)
 
 
 
@@ -327,6 +383,7 @@ class SKA1LOW_AA4(Telescope):
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA4"
+        Telescope.__init__(self)
 
 
 
@@ -349,6 +406,7 @@ class SKA1LOW_AA05(Telescope):
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA0.5"
+        Telescope.__init__(self)
 
 
 
@@ -371,6 +429,7 @@ class SKA1LOW_AA2(Telescope):
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA2"
+        Telescope.__init__(self)
 
 
 
@@ -388,36 +447,43 @@ class SKA1LOW_AA1(Telescope):
         self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
         self.T_spl = T_spl
         self.stage = "AA1"
+        Telescope.__init__(self)
 
 
 
-class Survey(Telescope):
+class Survey(ABC):
     """
     The base survey class, upon which we may build the various surveys to be carried out by SKA-LOW. Cannot be directly instantiated.
 
     Parameters
     ----------
-    Telescope : class Telescope
+    Tel : class Telescope
         The telescope used in the survey.
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, Telescope): 
-        self.Telescope = Telescope
+    def __init__(self, Tel): 
+        self.Tel = Tel
         self.z_med = (self.z_min + self.z_max) / 2. # Median redshift
+
+        self.nu_med = nu_21 
         
         self.asurv = self.asurv * (np.pi/180.)**2 # Survey area in sr
 
-        self.npt = self.asurv / Telescope.fov_at_z(self.z_med) # Number of pointings
+        self.npt = self.asurv / Tel.fov_at_z(self.z_med) # Number of pointings
         self.t_single = (self.tsurv*3600.) / self.npt # Integration time per pointing
         
-        self.T_sys = get_T_sys1(self.z_med, Telescope.T_spl, self.T_atm) + T_CMB + get_T_rcv(self.z_med) # in K
+        self.T_sys = get_T_sys1(self.z_med, Tel.T_spl, self.T_atm) + T_CMB + get_T_rcv(self.z_med) # in K
         
         self.nk = 20 # number of k bins
 
         self.aeffdish = get_A_eff(self.z_med, A_crit) # Effective collecting area per station in m^2 | np.pi * (Telescope.ddish / 2.)**2
 
-        self.aeff = get_A_eff(self.z_med, Telescope.area) # Total effective collecting area [m^2] CHECK
+        self.aeff = get_A_eff(self.z_med, Tel.area) # Total effective collecting area [m^2] CHECK
+
+        self.nvis = self.Tel.nvisD * (lambda_21 * (1+self.z_med))**2
+        self.u = Tel.D / (lambda_21 * (1+self.z_med))
+        self.du = Tel.dD / (lambda_21 * (1+self.z_med))
 
 
     def volelement(self, z=None): # tested
@@ -435,7 +501,7 @@ class Survey(Telescope):
         H_z = (hlittle * 100 * (OMm * (1+z)**3 + OMl)**0.5) # in km s^-1 Mpc^-1
         y = c * 1e-3 * (1.+z)**2 / (H_z * nu_21) * hlittle # in Mpc s/h
         
-        return r**2 * y  * self.Telescope.fov_at_z(z) * self.Telescope.dnu
+        return r**2 * y  * self.Tel.fov_at_z(z) * self.Tel.dnu
 
 
     def volsurvey(self): # tested
@@ -539,7 +605,7 @@ class Interferometer(Survey):
 
     Parameters
     ----------
-    Telescope : class Telescope
+    Tel : class Telescope
         The telescope object with which the survey is carried out.
     z_max : float
         The maximum redshift of the survey.
@@ -552,16 +618,16 @@ class Interferometer(Survey):
     T_atm : float
         The atmospheric temperature contribution to the system temperature, in Kelvins.
     """
-    def __init__(self, Telescope, z_max, z_min, asurv, tsurv, T_atm):
+    def __init__(self, Tel, z_max, z_min, asurv, tsurv, T_atm, freq_bin):
         self.asurv = asurv
         self.tsurv = tsurv # tsurv is in hours
         self.T_atm = T_atm
         self.z_max = z_max
         self.z_min = z_min
-        Survey.__init__(self, Telescope)
-        self.gen_nvis(Telescope)
+        Survey.__init__(self, Tel)
         self.kperparr = self.kperp_at_z(self.z_med)
-        self.Telescope = Telescope
+        self.Tel = Tel
+        self.dfreq = freq_bin
         
         # Set min and max k modes via the visibility coverage 
         kmin1 = self.kperparr[0]
@@ -571,55 +637,6 @@ class Interferometer(Survey):
         # use the smallest kmin possible
         self.kmin = min(kmin1, kmin2)
         self.kmax = self.kperparr[-1]
-
-
-    def gen_nvis(self, Telescope):
-        """
-        Generates the baseline number density for a given interferometric array, and assigns it and the baselines to the object.
-
-        Parameters
-        ----------
-        Telescope : Telescope object
-            The telescope array whose n(u) is to be calculated.
-        """
-        # Target coordinate - Polaris Australis
-        phase_centre = SkyCoord("21:08:46.8 -88:57:23.4", unit=(units.hourangle, units.deg))
-
-        # Start time of the observation
-        start_time = Time("2024-09-25T03:23:21.6", format='isot', scale='utc')
-        nu = nu_21 / (1+self.z_med)
-
-        observation = simulate_observation(
-            array_config=LowSubArray(subarray_type=Telescope.stage).array_config,
-            phase_centre=phase_centre,
-            start_time=start_time,
-            duration=5000,
-            integration_time=500,
-            ref_freq=nu,
-            chan_width=Telescope.dnu,
-            n_chan=1,
-            horizon=0,
-        )
-
-        uvw = UVW.UVW(observation, ignore_autocorr=False)
-
-        u_vals = (uvw.u_wave**2 + uvw.v_wave**2)**0.5
-
-        bins = np.geomspace(20, 15000, 51)
-
-        counts, _ = np.histogram(u_vals, bins)
-
-        self.u = (bins[1:] + bins[:-1]) / 2
-
-        self.nvis = counts.astype(float)
-
-        self.du = bins[1:] - bins[:-1] 
-
-        self.nvis /= self.du * self.u * 2 * np.pi
-
-        sumn = 2. * np.pi * sum(self.nvis * self.u * self.du) # numerical approximation to the half plane integral
-
-        self.nvis *= (0.5 * Telescope.ndish * (Telescope.ndish-1.)) / sumn # this normalises the half plane integral to the total number of baseline pairs
 
 
     def nvis_to_spline(self, lam=1e6):
@@ -732,9 +749,11 @@ class Interferometer(Survey):
         
         lambda_z = lambda_21 * (1.+z)
 
-        sig_T = ((lambda_z**2) * self.T_sys) / (self.aeffdish * np.sqrt(self.Telescope.dnu * self.t_single * nvis_at_z * dusq))
+        print(self.dfreq)
 
-        sig_T /= np.sqrt(self.Telescope.nbeam * self.Telescope.npol)
+        sig_T = ((lambda_z**2) * self.T_sys) / (self.aeffdish * np.sqrt(self.dfreq * self.t_single * nvis_at_z * dusq))
+
+        sig_T /= np.sqrt(self.Tel.nbeam * self.Tel.npol)
 
         sig_T[np.isinf(sig_T)] = np.nan
         
@@ -765,7 +784,7 @@ class Interferometer(Survey):
         u_at_z, _, du_at_z = self.renorm_vis(z)
         
         dusq = 2. * np.pi * u_at_z * du_at_z
-        fov = self.Telescope.fov_at_z(z)
+        fov = self.Tel.fov_at_z(z)
 
         pnoise = (sig_T**2) * vpix * dusq / fov
         
@@ -776,20 +795,20 @@ class Interferometer(Survey):
 
     def plot_uv(self, pointing_time=None, duration=None):
         """
-        Plots the uv distribution of a given survey, using the functionality provided by SKA-ost-array-config.
+        Plots the uv distribution of a typical observation, using the functionality provided by SKA-ost-array-config.
 
         Parameters
         ----------
         integration_time : float (optional)
-            The time per pointing, in seconds. If no value is specified, this defaults to the integration time of the survey.
+            The time per pointing, in seconds. If no value is specified, this defaults to a minute.
         duration : float (optional)
-            The total duration of the observation, in hours. If no value is specified, this defaults to the survey time.
+            The total duration of the observation, in hours. If no value is specified, this defaults to 8 hours.
         """
 
         if pointing_time is None:
-            pointing_time = self.t_single
+            pointing_time = 60
         if duration is None:
-            duration = self.tsurv
+            duration = 1
 
         duration *= 3600
 
@@ -800,13 +819,13 @@ class Interferometer(Survey):
         nu = nu_21 / (1+self.z_med)
 
         observation = simulate_observation(
-            array_config=LowSubArray(subarray_type=self.Telescope.stage).array_config,
+            array_config=LowSubArray(subarray_type=self.Tel.stage).array_config,
             phase_centre=phase_centre,
             start_time=start_time,
             duration=duration,
             integration_time=pointing_time,
             ref_freq=nu,
-            chan_width=self.Telescope.dnu,
+            chan_width=self.Tel.dnu,
             n_chan=1,
             horizon=0,
         )
@@ -814,7 +833,7 @@ class Interferometer(Survey):
         uvw = UVW.UVW(observation, ignore_autocorr=False)
         plot_uv_coverage(uvw)
 
-        plt.title("Duration: " + str(duration / 3600) + " hours, pointing time: " + str(pointing_time) + " seconds, for " + str(self.Telescope.stage))
+        plt.title("Duration: " + str(duration / 3600) + " hours, pointing time: " + str(pointing_time) + " seconds, for " + str(self.Tel.stage))
 
 
 
@@ -825,7 +844,7 @@ class SingleDish(Survey): # tested
 
     Parameters
     ----------
-    Telescope : class Telescope
+    Tel : class Telescope
         The telescope object with which the survey is carried out.
     z_max : float
         The maximum redshift of the survey.
@@ -838,14 +857,15 @@ class SingleDish(Survey): # tested
     T_atm : float
         The atmospheric temperature contribution to the system temperature, in Kelvins.
     """
-    def __init__(self, Telescope, z_max, z_min, asurv, tsurv, T_atm):  
+    def __init__(self, Tel, z_max, z_min, asurv, tsurv, T_atm, freq_bin):  
         self.z_max = z_max
         self.z_min = z_min
         self.asurv = asurv
         self.tsurv = tsurv
-        self.Telescope = Telescope
+        self.Tel = Tel
         self.T_atm = T_atm
-        Survey.__init__(self, Telescope)
+        self.dfreq = freq_bin
+        Survey.__init__(self, Tel)
         # Determine min and max wavenumber according to beam fwhm amd survey volume
         # min k in perpendicular direction
         comovarcmin = Planck18.kpc_comoving_per_arcmin(self.z_med).value * 1e-3 * hlittle # in Mpc/h 
@@ -881,10 +901,10 @@ class SingleDish(Survey): # tested
         if z is None: # defaults to median redshift if none specified
             z = self.z_med
         lambda_z = lambda_21 * (1. + z)
-        sig_T = lambda_z**2 * self.T_sys / (self.Telescope.fov_at_z(z) * self.aeffdish * np.sqrt(self.Telescope.dnu * self.t_single))
+        sig_T = lambda_z**2 * self.T_sys / (self.Tel.fov_at_z(z) * self.aeffdish * np.sqrt(self.dfreq * self.t_single))
         
         # Scale to multiple dishes/beams/polarizations
-        sig_T /= np.sqrt(self.Telescope.ndish * self.Telescope.nbeam * self.Telescope.npol)
+        sig_T /= np.sqrt(self.Tel.ndish * self.Tel.nbeam * self.Tel.npol)
         
         return sig_T
 
@@ -1042,4 +1062,12 @@ def noisetokbin(kperparr, pnoise, karr):
             pknoise[ik] = sum1 / sum2
 
     return pknoise
+
+
+def dfreq_to_dz(dfreq, z):
+    max_freq = 1420e6 / (1+z) + dfreq / 2
+    min_freq = 1420e6 / (1+z) - dfreq / 2
+    dz = 1420e6 / min_freq - 1420e6 / max_freq
+
+    return dz # do z_range / dz to get number of redshift bins for observation. see if feasible for calculating line of sight power spectrum.
 

@@ -13,6 +13,7 @@ from matplotlib.ticker import AutoLocator
 from hmf import MassFunction
 from scipy.interpolate import make_interp_spline
 plt.rcParams.update({'font.size': 15})
+plt.rcParams['figure.figsize'] = [9, 6]
 
 
 class Base(ABC):
@@ -31,7 +32,8 @@ class Base(ABC):
         clear_prev_plot=False,
         Mmin=9,
         Mmax=12,
-        no_bins=10
+        no_bins=10,
+        label=None,
     ):
         """
         Generates a halo mass function at a given redshift. Used for testing of the halo finder.
@@ -78,17 +80,20 @@ class Base(ABC):
             los_dist = self.box_len
         
         if save_fig:
+            if label is None:
+                label= "z = "+str(self.z)
+            else:
+                pass
             if clear_prev_plot:
                 plt.clf() # clearing any previous plots
             plt.rcParams['figure.figsize'] = [9, 6]
             bins_plot = (bins[1:] + bins[:-1]) / 2
-            #plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*self.box_len**2*los_dist)), histtype='step', label='z = ' + str(self.z), color=str(color))
-            plt.hist(bins_plot, bins, weights=(0.5 * counts / ((bins[1:]-bins[:-1]) * self.box_len**2 * los_dist) * (bins[1:]+bins[:-1])), histtype='step', label='z = ' + str(self.z), color=str(color))
+            plt.hist(bins_plot, bins, weights=(0.5 * counts / ((bins[1:]-bins[:-1]) * self.box_len**2 * los_dist) * (bins[1:]+bins[:-1])), histtype='step', color=str(color), label=label)
             mf1 = MassFunction(Mmin=Mmin, Mmax=Mmax, z = self.z,
                         cosmo_params={"Om0":OMm}, 
                         hmf_model="Watson") 
             
-            plt.plot(mf1.m, mf1.dndm * mf1.m, label="z = " + str(self.z), linestyle=str(linestyle), color=str(color))
+            plt.plot(mf1.m, mf1.dndm * mf1.m, linestyle=str(linestyle), color=str(color))
             plt.title(title)
             plt.yscale("log")
             plt.xscale("log")
@@ -382,14 +387,14 @@ class Base(ABC):
 
         if field == "BT":
             x = self.BT_field
-            label = "BT, mK"
+            label = "BT, K"
         elif field == "halo":
             x = self.halo_field
             label = "Halo mass, M$_{\odot}$/h"
         else:
             print("Invalid field entered. Defaulting to brightness temperature. \n Valid field options are \"BT\" and \"halo\".")
             x = self.BT_field
-            label = "BT, mK"
+            label = "BT, K"
 
         # box coordinates
         fin_size = np.shape(x)[0] / self.HII_dim * self.box_len
@@ -621,7 +626,7 @@ class Ltcone(Base):
     halo_field: NDarray
         The halo field of the lightcone, in solar masses/h.
     BT_field : NDarray
-        The brightness temperature field of the lightcone, in mK.
+        The brightness temperature field of the lightcone, in K.
     Lightconer : Lightconer object
         The lightcone class object output by 21cmFAST.
     """
@@ -682,7 +687,7 @@ class Ltcone(Base):
 
         if field == "BT":
             x = self.BT_field
-            label = "Brightness temperature, mK"
+            label = "Brightness temperature, K"
         elif field == "dens":
             x = self.density_field
             label = "Overdensity"
@@ -692,7 +697,7 @@ class Ltcone(Base):
         else:
             print("Invalid field entered. Defaulting to brightness temperature. \n Valid field options are \"BT\", \"dens\", and \"halo\".")
             x = self.BT_field
-            label = "Brightness temperature, mK"
+            label = "Brightness temperature, K"
         
         extent = (0, lightcone.lightcone_dimensions[2], 0, lightcone.lightcone_dimensions[[1, 0, 1][0]])
 
@@ -861,7 +866,7 @@ class Box(Base):
     halo_field: NDarray
         The halo field of the coeval box, in solar masses/h.
     BT_field : NDarray
-        The brightness temperature field of the coeval box, in mK.
+        The brightness temperature field of the coeval box, in K.
         """
     def __init__(
         self, 

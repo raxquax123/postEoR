@@ -12,7 +12,7 @@ def plot_lightcone(
     lightcone_item, 
     save_loc : str,
     title : str,
-    label="Brightness temperature, mK",
+    label="Brightness temperature, K",
 ):
     """
     Plot and save the redshift evolution of a given quantity of the lightcone (e.g. brightness temperature, density).
@@ -26,7 +26,7 @@ def plot_lightcone(
     save_loc : str
         The path and filename for the plot to be saved to.
     label : str (optional)
-        The label to be put on the colorbar on the plot (defaults to brightness temperature in mK if no input given).
+        The label to be put on the colorbar on the plot (defaults to brightness temperature in K if no input given).
     title : str (optional)
         The title of the plot.
     """
@@ -106,7 +106,7 @@ def plot_colormaps(
     cb3 = ax3.pcolormesh(x1, y1, BT[:, :, 10], cmap = "magma")
     ax3.set_xlabel('$x$, Mpc/h')
     cbar3 = fig.colorbar(cb3)
-    cbar3.set_label('Brightness temperature, mK', rotation=270, labelpad = 12)
+    cbar3.set_label('Brightness temperature, K', rotation=270, labelpad = 12)
     cbar3.formatter.set_powerlimits((0, 0))
 
     fig.suptitle("HII_dim " + str(HII_dim) + ", box_len " + str(box_len) + ",  z = " + str(z))
