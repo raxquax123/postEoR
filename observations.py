@@ -26,6 +26,10 @@ if not os.path.exists('_cache'):
     os.mkdir('_cache')
 
 
+def binned_ps(cone, freq_bin):
+    
+    return
+
 
 def get_T_sys1(z, T_spl, T_atm):
     """
@@ -1065,6 +1069,21 @@ def noisetokbin(kperparr, pnoise, karr):
 
 
 def dfreq_to_dz(dfreq, z):
+    """
+    Convert a given frequency interval to a redshift interval.
+
+    Parameters
+    ----------
+    dfreq : float
+        The frequency interval to be converted, in Hz.
+    z : float
+        The central redshift at which the interval is calculated about.
+
+    Returns
+    -------
+    dz : float
+        The corresponding redshift interval.
+    """
     max_freq = 1420e6 / (1+z) + dfreq / 2
     min_freq = 1420e6 / (1+z) - dfreq / 2
     dz = 1420e6 / min_freq - 1420e6 / max_freq

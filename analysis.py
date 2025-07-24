@@ -5,10 +5,11 @@ import numpy as np
 from scipy.integrate import quad
 import py21cmfast as p21c
 import postEoR.tools as tools
-from postEoR.tools import hlittle, OMm, OMl
+from postEoR.tools import hlittle, OMm, OMl, nu_21
 import matplotlib.pyplot as plt
 plt.rcParams.update({'font.size': 15})
 import gc
+plt.style.use('seaborn-v0_8-ticks')
 
 
 def get_PS(x, box_len, HII_dim, kbins=None, remove_nan=True): 
@@ -395,81 +396,83 @@ def get_clustering_ps(x, box_len, HII_dim, kbins=None, remove_nan=True):
     return k, ps, err
 
 
-def get_2d_ps(x, box_len, HII_dim, kbins=None, remove_nan=True, save_fig=True):
-    """
-    Calculates the cylindrical power spectrum of the field.
+def get_2d_ps(x, par_bins=10, perp_bins=10):
+        """
+        Calculates and plots the cylindrical power spectrum for the input box/cone x.
 
-    Parameters
-    ----------
-    x : NDarray
-        The field whose clustering power spectrum is to be calculated.
-    box_len : float
-        The physical length of each of the spatial dimensions of the box / cone, in Mpc/h. 
-    HII_dim : int
-        The number of cells in each of the spatial dimensions of the box / cone.
-    kbins : NumPy array (optional)
-        The wavenumber bins to use in binning the power. If none / invalid bins are provided, bins will be generated automatically based on the minimum and maximum wavenumber and the number of cells in each dimension.
-    remove_nan : bool (optional)
-        Whether to remove NaN values from the binned power spectrum (need to keep if calculating the ratio between two power spectra). Defaults to True.
+        Parameters
+        ----------
+        x : Box object / Cone object
+            The object whose cylindrical BT power spectrum is to be calculated.
+        par_bins : int (optional)
+            The number of wavenumber bins to bin the line-of-sight power into for plotting. Defaults to 10.
+        perp_bins : int (optional)
+            The number of wavenumber bins to bin the perpendicular power into for plotting. Defaults to 10.
+        """
+        par_bins+=2
+        perp_bins+=2
 
-    Returns
-    -------
-    cross : NDarray
-    kvals : NDarray
-    """
-    y = x.copy()
+        BT = x.BT_field
+        power0 = np.zeros(np.shape(BT)[:2])
+        power2 = np.zeros(np.shape(BT)[2])
 
-    dims = np.shape(y)
-    plt.rcParams['figure.figsize'] = [11, 10]
+        # taking the mean of all the individual perp and parallel ps
+        for i in range(np.shape(BT)[0]):
+            for j in range(np.shape(BT)[1]):
+                power2 += np.abs(np.fft.fft(BT[i, j, :]))
+        for i in range(np.shape(BT)[2]):
+            power0 += np.abs(np.fft.fftn(BT[:, :, i]))
+        power2 /= np.shape(BT)[0] * np.shape(BT)[1]
+        power0 /= np.shape(BT)[2]
 
-    power0 = np.fft.fftn(flatten(y, 0))
-    power1 = np.fft.fftn(flatten(y, 1))
-    power2 = np.fft.fftn(flatten(y, 2))
+        n1 = np.size(power0)
+        n2 = np.size(power2)
+        dims1 = np.shape(BT)[0]
+        dims2 = np.shape(BT)[2]
 
-    del y
-    gc.collect()
+        perp = power0.reshape(n1)
+        para = power2.reshape(n2)
 
-    perp = (np.abs(power1)**2 + np.abs(power2)**2)**2
-    perp = perp.reshape(np.size(perp)) / (np.size(perp) * (HII_dim / box_len)**3) # normalising by sampling volume
-    para = np.abs(power0)**2
-    para = para.reshape(np.size(para)) / (np.size(para) * (HII_dim / box_len)**3)
+        # obtaining the corresponding wavenumbers
+        ks1 = np.fft.fftfreq(dims1, x.cell_size) * 2 * np.pi
+        kx, ky = np.meshgrid(ks1, ks1) # converting to a 2d array
+        k1 = (kx**2+ky**2)**0.5 # perp k-values
+        k1 = k1.reshape(np.size(k1)) # converting to 1d array for use in binned_statistic
+        kbins1 = np.geomspace(np.min(k1[np.nonzero(k1)]), np.max(k1), perp_bins) # sampling in log space - defining bin edges
+        kvals1 = ((kbins1[1:] + kbins1[:-1])) / 2
+        k2 = np.abs(np.fft.fftfreq(dims2, x.cell_size) * 2 * np.pi)
+        kbins2 = np.geomspace(np.min(k2[np.nonzero(k2)]), np.max(k2), par_bins) # sampling in log space - defining bin edges
+        kvals2 = ((kbins2[1:] + kbins2[:-1])) / 2
 
-    ksx = np.fft.fftfreq(dims[0], (box_len / HII_dim)) * 2 * np.pi # max accessible wavenumber corresponds to 2 * pi
-    ksy = np.fft.fftfreq(dims[1], (box_len / HII_dim)) * 2 * np.pi
-    ksz = np.fft.fftfreq(dims[2], (box_len / HII_dim)) * 2 * np.pi
-    kx, ky, kz = np.meshgrid(ksx, ksy, ksz) # converting to a 3d array
-    k = (kx**2+ky**2+kz**2)**0.5 # spherical k-values
-    k = k.reshape(np.size(k)) # converting to 1d array for use in binned_statistic
-    try: # check for input bins, and generate if none / invalid provided
-        if kbins is None:
-            kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1) # sampling in log space - defining bin edges
-            print("Generated bins.")
-        else:
-            print("Using input bins")
-    except AttributeError:
-        print("Incorrect bin type. Generating bins")
-        kbins = np.geomspace(np.min(k[np.nonzero(k)]), np.max(k), HII_dim//2+1)
+        Abins1, _, _ = stats.binned_statistic(k1, perp, statistic = "mean", bins = kbins1)
+        Abins2, _, _ = stats.binned_statistic(k2, para, statistic = "mean", bins = kbins2)
 
-    Abins1, _, _ = stats.binned_statistic(k, perp, statistic = "mean", bins = kbins)
-    Abins2, _, _ = stats.binned_statistic(k, para, statistic = "mean", bins = kbins)
+        # removing values past the nyquist frequency 
+        new_k_1 = np.array([y for y in kvals1 if y <= (2*np.pi / (2*x.cell_size))])
+        new_k_2 = np.array([y for y in kvals2 if y <= (2*np.pi / (2*x.cell_size))])
+        plot1 = Abins1[0:(np.size(new_k_1))] 
+        plot2 = Abins2[0:(np.size(new_k_2))] 
 
-    kvals = ((kbins[1:] + kbins[:-1])) / 2
+        # removing NaN values and adding a k=0 value for plotting
+        new_k_1 = new_k_1[~np.isnan(plot1)]
+        plot1 = plot1[~np.isnan(plot1)]
+        plot1 /= (np.max(new_k_1)**2 * np.pi * 4)
+        new_k_2 = new_k_2[~np.isnan(plot2)]
+        plot2 = plot2[~np.isnan(plot2)]
+        new_k_2 = new_k_2[:-1]
+        plot2 = plot2[:-1] # this truncation is just bc some weird sampling things were happening at the final wavenumber - think it was going inside the cell
+        plot2 /= (np.max(new_k_2) * 2 * np.pi)
 
-    cross = np.zeros([np.size(Abins1), np.size(Abins2)])
-    for i in range(np.size(Abins1)):
-        for j in range(np.size(Abins2)):
-            cross[i,j] = Abins1[i] * Abins2[j]
+        cross = np.zeros((np.size(plot2-1), np.size(plot1-1))) # calculating the cross power spectrum
+        for i in range(np.size(plot1)):
+            for j in range(np.size(plot2)):
+                cross[j,i] = plot1[i] * plot2[j]
 
-    if save_fig:
-        fig, ax = plt.subplots(1,1)
-        cb = ax.pcolormesh(np.log(kvals), np.log(kvals), np.log(cross), cmap = "viridis")
-        ax.set_xlabel("log(k$_{\perp}$, (h Mpc)$^{-1}$)")
-        ax.set_ylabel("log(k$_\|$, (h Mpc)$^{-1}$)")
-        cbar = fig.colorbar(cb)
-        cbar.set_label("log(P$_{cross}$, (mK)$^2$)")
-        plt.savefig("cross_ps.png")
-    
-    return cross, kvals
+        cb = plt.pcolormesh(np.log10(new_k_1), np.log10(new_k_2), np.log10(cross), cmap = "viridis")
+        plt.xlabel("log(k$_{\perp}$, h/Mpc)")
+        plt.ylabel("log(k$_\|$, h/Mpc)")
+        cbar = plt.colorbar(cb)
+        cbar.set_label("log(P$_{cross}$, (Mpc/h)$^3$)")
 
 
 def len_to_ang(len, z):

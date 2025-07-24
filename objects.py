@@ -6,9 +6,8 @@ import scipy.stats as stats
 import matplotlib.pyplot as plt
 from matplotlib.ticker import StrMethodFormatter
 from abc import ABC
-from postEoR.tools import hi_from_halos_2
-from postEoR.tools import hlittle, OMm, OMl, c, Mpc_to_m, solar_mass, G
-from postEoR.analysis import get_PS
+from postEoR.tools import hi_from_halos_2, hlittle, OMm, OMl, c, Mpc_to_m, solar_mass, G, nu_21, m_H, k_B, h, A_10
+from postEoR.analysis import get_PS, get_2d_ps, get_distance
 from matplotlib.ticker import AutoLocator
 from hmf import MassFunction
 from scipy.interpolate import make_interp_spline
@@ -564,7 +563,7 @@ class Base(ABC):
         return k, ps, err
     
 
-    def get_omega_HI(self):
+    def get_omega_HI(self) -> float:
         """
         Calculates the dimensionless HI density parameter.
 
@@ -574,9 +573,12 @@ class Base(ABC):
             The dimensionless HI density parameter.
         """
         H_0_std_units = (hlittle * 100 * 1000) / (Mpc_to_m)
+        Hz = H_0_std_units * (OMm * (1+self.z)**3+OMl)**0.5
 
-        rho_HI = np.sum(hi_from_halos_2(self.halo_field, 5)) / self.box_len**3 * hlittle**2 # removing h-agnosticity - omega_HI is h-agnostic by definition
-        omega_HI = (rho_HI * solar_mass / (Mpc_to_m)**3) / ((3 * H_0_std_units ** 2) / (8 * np.pi * G))
+        #rho_HI = np.sum(hi_from_halos_2(self.halo_field, 5)) / self.box_len**3 * hlittle**2 # removing h-agnosticity - omega_HI is h-agnostic by definition
+
+        rho_HI = (np.mean(self.BT_field)*32*np.pi*m_H*k_B*nu_21**2*Hz) / (3*h*c**3*A_10*(1+self.z)**2)
+        omega_HI = rho_HI / ((3 * H_0_std_units ** 2) / (8 * np.pi * G))
 
         return omega_HI
     
@@ -742,83 +744,22 @@ class Ltcone(Base):
     
     def get_cylindrical_ps(
         self,
-        title="Cylindrical power spectrum",
-        save_loc="cylindrical_ps.png",
+        par_bins=10, 
+        perp_bins=10,
         ):
         """
-        Calculate and plot the cylindrical power spectrum of the lightcone. NEEDS FURTHER TESTING
+        Calculate and plot the cylindrical power spectrum of the lightcone.
 
         Parameters
         ----------
-        title : str (optional)
-            The title of the output plot. Defaults to "Cylindrical power spectrum".
-        save_loc : str (optional)
-            The path to the save location of the output plot. Defaults to cylindrical_ps.png in the working directory.
+        x : Box object / Cone object
+            The object whose cylindrical BT power spectrum is to be calculated.
+        par_bins : int (optional)
+            The number of wavenumber bins to bin the line-of-sight power into for plotting. Defaults to 10.
+        perp_bins : int (optional)
+            The number of wavenumber bins to bin the perpendicular power into for plotting. Defaults to 10.
         """
-        BT = self.BT_field
-        power0 = np.zeros(np.shape(BT)[:-1])
-        power2 = np.zeros(np.shape(BT)[2])
-
-        # taking the mean of all the individual perp and parallel ps
-        for i in range(np.shape(BT)[0]):
-            for j in range(np.shape(BT)[1]):
-                power2 += np.abs(np.fft.fft(BT[i, j, :]))**2
-        for i in range(np.shape(BT)[2]):
-            power0 += np.abs(np.fft.fftn(BT[:, :, i]))**2
-        power2 /= np.shape(BT)[0] * np.shape(BT)[1]
-        power0 /= np.shape(BT)[2]
-
-        n1 = np.size(power0)
-        n2 = np.size(power2)
-        dims1 = np.shape(BT)[0]
-        dims2 = np.shape(BT)[2]
-
-        para = power2.reshape(n2)
-        perp = power0.reshape(n1) 
-
-        # obtaining the corresponding wavenumbers
-        ks1 = np.fft.fftfreq(dims1, (self.cell_size)) * 2 * np.pi
-        kx, ky = np.meshgrid(ks1, ks1) # converting to a 2d array
-        k1 = (kx**2+ky**2)**0.5 # perp k-values
-        k1 = k1.reshape(np.size(k1)) # converting to 1d array for use in binned_statistic
-        kbins1 = np.geomspace(np.min(k1[np.nonzero(k1)]), np.max(k1), dims1//16+1) # sampling in log space - defining bin edges
-        kvals1 = ((kbins1[1:] + kbins1[:-1])) / 2
-        k2 = np.abs(np.fft.fftfreq(dims2, np.abs(self.get_distance() / dims2)) * 2 * np.pi)
-        kbins2 = np.geomspace(np.min(k2[np.nonzero(k2)]), np.max(k2), dims2//16+1) # sampling in log space - defining bin edges
-        kvals2 = ((kbins2[1:] + kbins2[:-1])) / 2
-
-        Abins1, _, _ = stats.binned_statistic(k1, perp, statistic = "mean", bins = kbins1)
-        Abins2, _, _ = stats.binned_statistic(k2, para, statistic = "mean", bins = kbins2)
-
-        # removing values past the nyquist frequency | normalising by the sampling volume
-        new_k_1 = np.array([x for x in kvals1 if x <= (2*np.pi / (2*self.box_len / self.HII_dim))])
-        new_k_2 = np.array([x for x in kvals2 if x <= (2*np.pi / (2* np.abs(self.get_distance()) / dims2))])
-        plot1 = Abins1[0:(np.size(new_k_1))] / (np.max(new_k_1)**2 * np.pi * 4)
-        plot2 = Abins2[0:(np.size(new_k_2))] / (np.max(new_k_2) * 2 * np.pi)
-
-        # removing NaN values and adding a k=0 value for plotting
-        new_k_1 = new_k_1[~np.isnan(plot1)]
-        new_k_1 = np.insert(new_k_1, 0, np.min(k1[np.nonzero(k1)]))
-        plot1 = plot1[~np.isnan(plot1)]
-        new_k_2 = new_k_2[~np.isnan(plot2)]
-        new_k_2 = np.insert(new_k_2, 0, np.min(k2[np.nonzero(k2)]))
-        plot2 = plot2[~np.isnan(plot2)]
-        new_k_2 = new_k_2[:-1]
-        plot2 = plot2[:-1] # this truncation is just bc some weird sampling things were happening at the final wavenumber - think it was going inside the cell
-
-        cross = np.zeros((np.size(plot2), np.size(plot1))) # calculating the cross power spectrum
-        for i in range(np.size(plot1)):
-            for j in range(np.size(plot2)):
-                cross[j,i] = plot1[i] * plot2[j]
-
-        cb = plt.pcolormesh(np.log(new_k_1),np.log(new_k_2), np.log(cross), cmap = "viridis")
-        plt.xlabel("log(k$_{\perp}$, h/Mpc")
-        plt.ylabel("log(k$_\|$, h/Mpc")
-        cbar = plt.colorbar(cb)
-        cbar.set_label("log(P$_{cross}$, (Mpc/h)$^2$")
-        plt.title(str(title))
-
-        plt.savefig(str(save_loc))
+        get_2d_ps(self, par_bins, perp_bins)
 
 
     def get_distance(self) -> float:
@@ -846,6 +787,56 @@ class Ltcone(Base):
         dist = dist[0] * c_km * hlittle
 
         return dist
+    
+
+    def bin_freq_to_z(self, bin_width):
+        """
+        Converts a given frequency channel width into redshift bins.
+
+        Parameters
+        ----------
+        bin_width : float
+            The frequency channel width in Hz.
+
+        Returns
+        -------
+        z_bins : NDarray
+            The redshift bins corresponding to the given channel width, starting from the highest redshift of the lightcone. 
+        """
+        freq_start = nu_21 / (1 + self.z_start)
+        freq_end = nu_21 / (1 + self.z_end)
+        bin_edge=freq_start
+        freq_bins = list([])
+        while bin_edge <= freq_end:
+            freq_bins.append(bin_edge)
+            bin_edge += bin_width
+        z_bins = nu_21 / np.asarray(freq_bins) - 1
+
+        return z_bins
+
+
+    def freq_to_index(self, bin_width):
+        """
+        Convert a given frequency channel width into lightcone indices.
+
+        Parameters
+        ----------
+        bin_width : float
+            The frequency channel width in Hz.
+
+        Returns
+        -------
+        indices : NDarray
+            The indices of the lightcone corresponding to the given channel width, starting from index 0.
+        """
+        z_bins = self.bin_freq_to_z(bin_width)
+        dist_bins = list([])
+        for i in range(len(z_bins)):
+            dist_bins.append(get_distance(z_bins[i]))
+        indices = np.round((dist_bins[0] - np.asarray(dist_bins)) / self.cell_size, 0)
+
+        return indices
+
 
 
 
