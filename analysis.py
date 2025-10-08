@@ -413,17 +413,17 @@ def get_2d_ps(x, par_bins=10, perp_bins=10):
         perp_bins+=2
 
         BT = x.BT_field
-        power0 = np.zeros(np.shape(BT)[:2])
-        power2 = np.zeros(np.shape(BT)[2])
+        power0 = np.zeros(np.shape(BT)[:2], dtype=np.complex128)
+        power2 = np.zeros(np.shape(BT)[2], dtype=np.complex128)
 
         # taking the mean of all the individual perp and parallel ps
         for i in range(np.shape(BT)[0]):
             for j in range(np.shape(BT)[1]):
-                power2 += np.abs(np.fft.fft(BT[i, j, :]))
+                power2 += np.fft.fft(BT[i, j, :])
         for i in range(np.shape(BT)[2]):
-            power0 += np.abs(np.fft.fftn(BT[:, :, i]))
-        power2 /= np.shape(BT)[0] * np.shape(BT)[1]
-        power0 /= np.shape(BT)[2]
+            power0 += np.fft.fftn(BT[:, :, i])
+        power0 = np.abs(power0)**2
+        power2 = np.abs(power2)**2
 
         n1 = np.size(power0)
         n2 = np.size(power2)
@@ -463,16 +463,18 @@ def get_2d_ps(x, par_bins=10, perp_bins=10):
         plot2 = plot2[:-1] # this truncation is just bc some weird sampling things were happening at the final wavenumber - think it was going inside the cell
         plot2 /= (np.max(new_k_2) * 2 * np.pi)
 
-        cross = np.zeros((np.size(plot2-1), np.size(plot1-1))) # calculating the cross power spectrum
+        cross = np.zeros((np.size(plot2), np.size(plot1))) # calculating the cross power spectrum
         for i in range(np.size(plot1)):
             for j in range(np.size(plot2)):
-                cross[j,i] = plot1[i] * plot2[j]
+                cross[j,i] = plot1[i]**0.5 * plot2[j]**0.5
 
-        cb = plt.pcolormesh(np.log10(new_k_1), np.log10(new_k_2), np.log10(cross), cmap = "viridis")
-        plt.xlabel("log(k$_{\perp}$, h/Mpc)")
-        plt.ylabel("log(k$_\|$, h/Mpc)")
+        cross /= (np.size(BT) * (x.HII_dim / x.box_len)**3)
+
+        cb = plt.pcolormesh(new_k_1, new_k_2, cross, cmap = "magma", norm="log")
+        plt.xlabel("k$_{\perp}$, h/Mpc")
+        plt.ylabel("k$_\|$, h/Mpc")
         cbar = plt.colorbar(cb)
-        cbar.set_label("log(P$_{cross}$, (Mpc/h)$^3$)")
+        cbar.set_label("P$_{cylin}$(k), K$^2$(Mpc/h)$^3$)")
 
 
 def len_to_ang(len, z):

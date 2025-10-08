@@ -33,6 +33,8 @@ def generate_box(
     random_seed=1122,
     incl_EoR_contr=True,
     HI_model=3,
+    ast_options=None,
+    cosmo_options=None,
 ) -> Box:
     """
     Generates a coeval box at specified redshift using the base functionality of 21cmFAST and post-processing functions in tools.py.
@@ -235,12 +237,12 @@ def generate_cone(
     # defining the redshift bounds
     simulation_options = p21c.SimulationOptions(HII_DIM=HII_dim, BOX_LEN=box_len / hlittle)
     if max_redshift < 35:
-        astro_options = p21c.AstroOptions(USE_UPPER_STELLAR_TURNOVER=False, USE_EXP_FILTER=False, INHOMO_RECO=False, USE_TS_FLUCT=False, HII_FILTER = 'sharp-k', USE_MINI_HALOS=False, CELL_RECOMB=True)
-        print("INHOMO_RECO changed to False, since max_redshift < 35.")
+        fast_z=35
     else:
-        astro_options = p21c.AstroOptions(USE_UPPER_STELLAR_TURNOVER=False, USE_EXP_FILTER=False, INHOMO_RECO=True, USE_TS_FLUCT=False, HII_FILTER = 'sharp-k', USE_MINI_HALOS=False, CELL_RECOMB=True)
+        fast_z=max_redshift
+    astro_options = p21c.AstroOptions(USE_UPPER_STELLAR_TURNOVER=False, USE_EXP_FILTER=False, INHOMO_RECO=True, USE_TS_FLUCT=False, HII_FILTER = 'sharp-k', USE_MINI_HALOS=False, CELL_RECOMB=True)
     inputs = p21c.InputParameters(cosmo_params=cosmo_params, matter_options=matter_options, simulation_options=simulation_options, 
-                                  astro_options=astro_options, astro_params=astro_params, random_seed=random_seed, node_redshifts=np.geomspace(min_redshift, max_redshift, nchunks)
+                                  astro_options=astro_options, astro_params=astro_params, random_seed=random_seed, node_redshifts=np.geomspace(min_redshift, fast_z, nchunks)
     )
     print("inputs in")
     initial_conditions = p21c.compute_initial_conditions(
@@ -288,6 +290,11 @@ def generate_cone(
         vel = 0
         vel_grad = np.zeros(np.shape(dens_ltcone))
 
+    if max_redshift < 35:
+        max_index = int(tools.get_distance(max_redshift, min_redshift) / (box_len / HII_dim))
+        BT_EoR_ltcone = BT_EoR_ltcone[:, :, 0:max_index]
+        dens_ltcone = dens_ltcone[:, :, 0:max_index]
+        vel_grad = vel_grad[:, :, 0:max_index]
 
     # clear memory of things no longer in use
     del lcn
