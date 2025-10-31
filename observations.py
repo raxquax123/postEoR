@@ -21,6 +21,9 @@ from scipy.interpolate import make_smoothing_spline
 import matplotlib.pyplot as plt
 import os
 import hickle
+plt.style.use('seaborn-v0_8-ticks')
+plt.rcParams.update({'font.size': 15})
+plt.rcParams['figure.figsize'] = [9, 6]
 
 if not os.path.exists('_cache'):
     os.mkdir('_cache')
@@ -241,6 +244,121 @@ def get_survey_volume(z_max, z_min, f_sky=0.0024):
     return V_sur
 
 # total observation area of ska-low in z=3-6 band is approx 0.24% of sky - for ref, moon covers 0.00048%
+
+
+def avoid_fg(z, BT, survey, cell_size, use_horizon=True, grad=0.3, const=0.5):
+    """
+    Applies a foreground avoidance regime for calculating the observed power.
+
+    Parameters
+    ----------
+    z : float
+        The mean redshift of the input field.
+    BT : NDarray
+        The brightness temperature field being observed.
+    survey : Survey object
+        The survey being used to observe the field.
+    cell_size : float
+        The length in Mpc/h of a cell in the input field.
+    use_horizon : bool (optional)
+        Whether to apply a horizon-limit foreground avoidance regime. Defaults to True.
+    grad : float (optional)
+        If not using a horizon-limit cut, the regime will instead be k_par > grad * k_perp + const. Defaults to 0.3.
+    const : float (optional)
+        If not using a horizon-limit cut, the regime will instead be k_par > grad * k_perp + const. Defaults to 0.5.
+
+    Returns
+    -------
+    k_plot : NDarray
+        The wavenumbers corresponding to the power spectrum.
+    power : NDarray
+        The foreground-avoidance spherically-averaged power spectrum.
+    error2 : NDarray
+        The standard deviation in each bin of the power spectrum.
+    noisebins : NDarray
+        The thermal noise power spectrum after foreground avoidance.
+    """
+    power_3d = np.abs(np.fft.fftn(BT))**2 / (np.size(BT) * (1 / cell_size)**3)
+
+    ks1 = np.abs(np.fft.fftfreq(np.shape(BT)[0], cell_size) * 2 * np.pi)
+    ks2 = np.abs(np.fft.fftfreq(np.shape(BT)[2], cell_size) * 2 * np.pi)
+    k_x, k_y, k_z = np.meshgrid(ks1, ks1, ks2, indexing="xy")
+    k_perp = (k_x**2+k_y**2)**0.5
+    k_3d = (k_x**2+k_y**2+k_z**2)**0.5
+
+    perp_k_bins = np.geomspace(np.min(k_perp[np.nonzero(k_perp)]), np.max(k_perp), 21)
+    para_k_bins = np.geomspace(np.min(ks2[np.nonzero(ks2)]), np.max(ks2), 21)
+
+    power_2d = np.zeros([np.size(para_k_bins)-1, np.size(perp_k_bins)-1])
+
+    for i in range(len(perp_k_bins) - 1):
+        above_min = k_perp >= perp_k_bins[i]
+        below_max = k_perp < perp_k_bins[i+1]
+        check = (above_min & below_max).astype(int)
+        unbinned = np.sum(power_3d * check, axis=(0,1)) / (np.sum(check, axis=(0,1)))
+        binned, _, _ = binned_statistic(ks2, unbinned, statistic="mean", bins=para_k_bins)
+        power_2d[:, i] += binned
+
+    nan_check = np.sum(power_2d, axis=1)
+    power_2d = power_2d[~np.isnan(nan_check), :]
+    nan_check = np.append(nan_check, 1)
+    para_k_bins = para_k_bins[~np.isnan(nan_check)]
+
+    new_k_1 = (perp_k_bins[1:]+perp_k_bins[:-1])/2
+    new_k_2 = (para_k_bins[1:]+para_k_bins[:-1])/2
+
+    k_gridxy, k_gridz = np.meshgrid(new_k_1, new_k_2, indexing="xy")
+    k_grid = (k_gridxy**2+k_gridz**2)**0.5
+
+    k_unavg = np.reshape(k_grid, np.size(k_grid))
+    pwr_unavg = np.reshape(power_2d, np.size(power_2d))
+
+    k_bins = np.geomspace(np.min(k_unavg[np.nonzero(k_unavg)]), np.max(k_unavg), 20)
+    k_vals = (k_bins[1:] + k_bins[:-1])/2
+    new_k = np.array([x for x in k_vals if x <= (2*np.pi / (2*cone.box_len / cone.HII_dim))])
+
+    theta = (lambda_21 * (1+z) / A_crit**0.5)
+    H_0 = hlittle * 100
+    H = H_0 * 1000 * (OMm * (1+z)**3+OMl)**0.5
+
+    if use_horizon:
+        cut = k_gridz > (H * get_distance(z) * theta) / (c * (1+z)) * k_gridxy # horizon limit cut
+    else:
+        cut = k_gridz > grad * k_gridxy + const
+
+    pwr = pwr_unavg[np.reshape(cut, np.size(cut))]
+    k = k_unavg[np.reshape(cut, np.size(cut))]
+
+    Abins1, _, _ = binned_statistic(k, pwr, statistic = "mean", bins = k_bins)
+    bin_count1, _, _ = binned_statistic(k, pwr, statistic="count", bins=k_bins) # obtaining number of data points in each bin
+    error1, _, _ = binned_statistic(k, pwr, statistic = "std", bins = k_bins) # obtaining standard deviation in each bin
+
+    error1 /= bin_count1**0.5
+    Abins1 = Abins1[0:(np.size(new_k))]
+    error1 = error1[0:(np.size(new_k))]
+
+    k_plot = new_k[~np.isnan(Abins1)]
+    error1 = error1[~np.isnan(Abins1)]
+    Abins2 = Abins1[~np.isnan(Abins1)]
+
+    k_plot = k_plot[error1>1e-11]
+    power = Abins2[error1>1e-11]
+    error2 = error1[error1>1e-11]
+
+    ps, k_perp = survey.noise_power_perp(z)
+    noise = make_interp_spline(k_perp, ps, k=1)
+    noise_grid, _ = np.meshgrid(noise(new_k_1), noise(new_k_2))
+    noise = np.reshape(noise_grid[cut], np.size(noise_grid[cut]))
+
+    noisebins, _, _ = binned_statistic(k, noise, statistic="sum", bins=k_bins)
+    count, _, _ = binned_statistic(k, noise, statistic="count", bins=k_bins)
+
+    noisebins /= count**0.5
+    noisebins = noisebins[0:(np.size(new_k))]
+    noisebins = noisebins[~np.isnan(Abins1)]
+    noisebins = noisebins[error1>1e-11]
+
+    return k_plot, power, error2, noisebins
 
 
 """

@@ -13,6 +13,7 @@ from hmf import MassFunction
 from scipy.interpolate import make_interp_spline
 plt.rcParams.update({'font.size': 15})
 plt.rcParams['figure.figsize'] = [9, 6]
+plt.style.use('seaborn-v0_8-ticks')
 
 
 class Base(ABC):
@@ -182,7 +183,7 @@ class Base(ABC):
         kbins=None, 
         remove_nan=True, 
         color="tab:blue", 
-        linestyle="-", 
+        marker="x", 
         title="Power spectrum", 
         save_loc="ps.png", 
         save_fig=True,
@@ -202,8 +203,8 @@ class Base(ABC):
             Whether to remove NaN values from the binned power spectrum (need to keep if calculating the ratio between two power spectra). Defaults to True.
         color : str (optional)
             The desired color of the plot. Defaults to "tab:blue".
-        linestyle : str (optional)
-            The desired linestyle of the plot. Defaults to "-".
+        marker : str (optional)
+            The desired marker style of the plot. Defaults to "x".
         title : str (optional)
             The title of the output plot. Defaults to "Power spectrum".
         save_loc : str (optional)
@@ -252,7 +253,7 @@ class Base(ABC):
             if clear_prev_plot:
                 plt.clf() # clearing any previous plots
             plt.rcParams['figure.figsize'] = [9, 6]
-            plt.plot(new_k, plot1, color=str(color), label="z = " + str(self.z) + ", " + str(field), linestyle=str(linestyle))
+            plt.scatter(new_k, plot1, color=str(color), label="z = " + str(self.z) + ", " + str(field), marker=str(marker))
 
             plt.yscale("log")
             plt.xscale("log")
@@ -272,7 +273,7 @@ class Base(ABC):
         kbins=None, 
         remove_nan=True,
         color="tab:blue", 
-        linestyle="-", 
+        marker="x", 
         title="Dimensionless power spectrum", 
         save_loc="dimless_ps.png", 
         save_fig=True,
@@ -292,8 +293,8 @@ class Base(ABC):
             Whether to remove NaN values from the binned power spectrum (need to keep if calculating the ratio between two power spectra). Defaults to True.
         color : str (optional)
             The desired color of the plot. Defaults to "tab:blue".
-        linestyle : str (optional)
-            The desired linestyle of the plot. Defaults to "-".
+        marker : str (optional)
+            The desired marker style of the plot. Defaults to "x".
         title : str (optional)
             The title of the output plot. Defaults to "Dimensionless power spectrum".
         save_loc : str (optional)
@@ -342,7 +343,7 @@ class Base(ABC):
             if clear_prev_plot:
                 plt.clf() # clearing any previous plots
             plt.rcParams['figure.figsize'] = [9, 6]
-            plt.plot(new_k, plot1, color=str(color), label="z = " + str(self.z) + ", " + str(field), linestyle=str(linestyle))
+            plt.scatter(new_k, plot1, color=str(color), label="z = " + str(self.z) + ", " + str(field), marker=str(marker))
 
             plt.yscale("log")
             plt.xscale("log")
@@ -485,7 +486,7 @@ class Base(ABC):
         kbins=None, 
         remove_nan=True, 
         color="tab:blue", 
-        linestyle="-", 
+        marker="x", 
         title="Clustering power spectrum", 
         save_loc="clustering_ps.png", 
         save_fig=True,
@@ -504,8 +505,8 @@ class Base(ABC):
             Whether to remove NaN values from the binned power spectrum (need to keep if calculating the ratio between two power spectra). Defaults to True.
         color : str (optional)
             The desired color of the plot. Defaults to "tab:blue".
-        linestyle : str (optional)
-            The desired linestyle of the plot. Defaults to "-".
+        marker : str (optional)
+            The desired marker style of the plot. Defaults to "x".
         title : str (optional)
             The title of the output plot. Defaults to "Clustering power spectrum".
         save_loc : str (optional)
@@ -549,7 +550,7 @@ class Base(ABC):
             if clear_prev_plot:
                 plt.clf() # clearing any previous plots
             plt.rcParams['figure.figsize'] = [9, 6]
-            plt.plot(k, ps, color=str(color), label="z = " + str(self.z) + ", " + str(field), linestyle=str(linestyle))
+            plt.plot(k, ps, color=str(color), label="z = " + str(self.z) + ", " + str(field), marker=str(marker))
 
             plt.yscale("log")
             plt.xscale("log")
@@ -746,20 +747,21 @@ class Ltcone(Base):
         self,
         par_bins=10, 
         perp_bins=10,
+        redshift_bin=0.3
         ):
         """
         Calculate and plot the cylindrical power spectrum of the lightcone.
 
         Parameters
         ----------
-        x : Box object / Cone object
-            The object whose cylindrical BT power spectrum is to be calculated.
         par_bins : int (optional)
             The number of wavenumber bins to bin the line-of-sight power into for plotting. Defaults to 10.
         perp_bins : int (optional)
             The number of wavenumber bins to bin the perpendicular power into for plotting. Defaults to 10.
+        redshift_bin : float (optional)
+            The width of the redshift to divide the cone into for the purposes of calculating the cylindrical power spectrum.
         """
-        get_2d_ps(self, par_bins, perp_bins)
+        get_2d_ps(self, par_bins, perp_bins, redshift_bin)
 
 
     def get_distance(self) -> float:

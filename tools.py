@@ -481,28 +481,36 @@ def bin_freq_to_z(z_start, z_end, bin_width):
         return z_bins
 
 
-def z_to_index(cell_size, z_bins):
-        """
-        Converts redshift bins into lightcone indices.
+def z_to_index(cone, bin_width):
+    """
+    Calculates the indices corresponding to the cone being divided into redshift bins of a specified width.
 
-        Parameters
-        ----------
-        cell_size : float
-            The size of the lightcone cells, in Mpc/h.
-        z_bins : NDarray
-            The redshift bins to be converted.
+    Parameters
+    ----------
+    cone : Ltcone object
+        The cone being divided.
+    bin_width : float
+        The redshift bin width to divide the cone into.
+    
+    Returns
+    -------
+    indices : NDarray
+        The indices corresponding to the edges of the redshift bins that the lightcone has been divided into.
+    """
+    bin_edge=cone.z_end
+    z_bins=list([])
 
-        Returns
-        -------
-        indices : NDarray
-            The indices of the lightcone corresponding to the given channel width, starting from index 0.
-        """
-        dist_bins = list([])
-        for i in range(len(z_bins)):
-            dist_bins.append(get_distance(z_bins[i]))
-        indices = np.round((dist_bins[0] - np.asarray(dist_bins)) / cell_size, 0)
+    while bin_edge <= cone.z_start:
+        z_bins.append(bin_edge)
+        bin_edge += bin_width
 
-        return indices
+    dist_bins = list([])
+    for i in range(len(z_bins)):
+        dist_bins.append(get_distance(z_bins[i]))
+
+    indices = np.round((np.asarray(dist_bins) - dist_bins[0]) / cone.cell_size, 0)
+
+    return indices
 
 
 def get_distance(z_start, z_end=0):

@@ -10,7 +10,7 @@ plt.rcParams.update({'font.size': 15})
 plt.rcParams['figure.figsize'] = [9, 6]
 
 
-def gen_ska_low_forecast(z, lin_bias=2.5, asurv=100, tsurv=5000, freq_bin=10e6, plot_dens=False, color="tab:orange", incl_AAstar=False, fig=None, ax1=None, HI_model=3):
+def gen_ska_low_forecast(z, lin_bias=2.5, asurv=100, tsurv=5000, freq_bin=10e6, plot_dens=False, color="tab:orange", use_AA4=False, fig=None, ax1=None, HI_model=3):
     """
     Calculates and plots a theoretical HI power spectrum at the specified redshift for SKA-Low, using CAMB for the non-linear matter power spectrum (halofit).
 
@@ -30,8 +30,8 @@ def gen_ska_low_forecast(z, lin_bias=2.5, asurv=100, tsurv=5000, freq_bin=10e6, 
         Whether to also plot the forecasted density power spectrum (in color "tab:blue"). Defaults to False.
     color : str (optional)
         The color to plot the HI power spectrum in. Defaults to "tab:orange".
-    incl_AAstar : bool (optional)
-        Whether to also plot the error bars for AA*. Defaults to False.
+    use_AA4 : bool (optional)
+        Whether to use AA4 when generating the forecast. Defaults to False.
     fig : Matplotlib figure object (optional)
         A pre-existing figure object to plot the forecast onto. Defaults to None.
     fig : Matplotlib axis object (optional)
@@ -86,13 +86,17 @@ def gen_ska_low_forecast(z, lin_bias=2.5, asurv=100, tsurv=5000, freq_bin=10e6, 
     comp_survey = obs.Interferometer(AAstar, 6, 3, asurv, tsurv, 0, freq_bin)
 
     ax1.plot(kh_nonlin, camb_BT, color=color, label="HI PS, z=" + str(z))
-    ps, k_perp = some_survey.noise_power_perp(z)
-    noise = make_interp_spline(k_perp, ps, k=1)
+
+    if use_AA4:
+        ps, k_perp = some_survey.noise_power_perp(z)
+        noise = make_interp_spline(k_perp, ps, k=1)
+        print("AA4 used")
+    else:
+        ps, k_perp = comp_survey.noise_power_perp(z)
+        noise = make_interp_spline(k_perp, ps, k=1)
+        print("AA* used")
+
     ax1.fill_between(kh_nonlin, camb_BT - noise(kh_nonlin), camb_BT + noise(kh_nonlin), alpha=0.2, color=color)
-    ps, k_perp = comp_survey.noise_power_perp(z)
-    noise = make_interp_spline(k_perp, ps, k=1)
-    if incl_AAstar:
-        ax1.fill_between(kh_nonlin, camb_BT - noise(kh_nonlin), camb_BT + noise(kh_nonlin), alpha=0.2, color="tab:blue")
 
     if plot_dens:
         ax2 = ax1.twinx() 

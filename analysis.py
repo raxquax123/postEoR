@@ -5,7 +5,7 @@ import numpy as np
 from scipy.integrate import quad
 import py21cmfast as p21c
 import postEoR.tools as tools
-from postEoR.tools import hlittle, OMm, OMl, nu_21
+from postEoR.tools import hlittle, OMm, OMl, nu_21, z_to_index
 import matplotlib.pyplot as plt
 plt.rcParams.update({'font.size': 15})
 import gc
@@ -396,85 +396,67 @@ def get_clustering_ps(x, box_len, HII_dim, kbins=None, remove_nan=True):
     return k, ps, err
 
 
-def get_2d_ps(x, par_bins=10, perp_bins=10):
-        """
-        Calculates and plots the cylindrical power spectrum for the input box/cone x.
+def get_2d_ps(cone, par_bins=10, perp_bins=10, redshift_bin=0.3):
+    """
+    Calculates and plots the cylindrical power spectrum for the input box/cone x.
 
-        Parameters
-        ----------
-        x : Box object / Cone object
-            The object whose cylindrical BT power spectrum is to be calculated.
-        par_bins : int (optional)
-            The number of wavenumber bins to bin the line-of-sight power into for plotting. Defaults to 10.
-        perp_bins : int (optional)
-            The number of wavenumber bins to bin the perpendicular power into for plotting. Defaults to 10.
-        """
-        par_bins+=2
+    Parameters
+    ----------
+    cone: Ltcone object
+        The cone whose cylindrical BT power spectrum is to be calculated.
+    par_bins : int (optional)
+        The number of wavenumber bins to bin the line-of-sight power into for plotting. Defaults to 10.
+    perp_bins : int (optional)
+        The number of wavenumber bins to bin the perpendicular power into for plotting. Defaults to 10.
+    redshift_bin : float (optional)
+        The width of the redshift to divide the cone into for the purposes of calculating the cylindrical power spectrum.
+    """
+    indices = np.flip(z_to_index(cone, redshift_bin))
+    for frame in range(len(indices)-1):
+        perp_bins=15
+        par_bins=15
         perp_bins+=2
+        par_bins+=2
+        BT = cone.BT_field
+        BT = BT[:, :, int(indices[frame+1]):int(indices[frame])]
+        z = cone.z_start - redshift_bin / 2 - redshift_bin*int(frame)
 
-        BT = x.BT_field
-        power0 = np.zeros(np.shape(BT)[:2], dtype=np.complex128)
-        power2 = np.zeros(np.shape(BT)[2], dtype=np.complex128)
+        power_3d = np.abs(np.fft.fftn(BT))**2 / (np.size(BT) * (cone.HII_dim / cone.box_len)**3)
 
-        # taking the mean of all the individual perp and parallel ps
-        for i in range(np.shape(BT)[0]):
-            for j in range(np.shape(BT)[1]):
-                power2 += np.fft.fft(BT[i, j, :])
-        for i in range(np.shape(BT)[2]):
-            power0 += np.fft.fftn(BT[:, :, i])
-        power0 = np.abs(power0)**2
-        power2 = np.abs(power2)**2
+        ks1 = np.abs(np.fft.fftfreq(np.shape(BT)[0], cone.cell_size) * 2 * np.pi)
+        ks2 = np.abs(np.fft.fftfreq(np.shape(BT)[2], cone.cell_size) * 2 * np.pi)
+        k_x, k_y, k_z = np.meshgrid(ks1, ks1, ks2, indexing="xy")
+        k_perp = (k_x**2+k_y**2)**0.5
+        k_3d = (k_x**2+k_y**2+k_z**2)**0.5
 
-        n1 = np.size(power0)
-        n2 = np.size(power2)
-        dims1 = np.shape(BT)[0]
-        dims2 = np.shape(BT)[2]
+        perp_k_bins = np.geomspace(np.min(k_perp[np.nonzero(k_perp)]), np.max(k_perp), perp_bins)
+        para_k_bins = np.geomspace(np.min(ks2[np.nonzero(ks2)]), np.max(ks2), par_bins)
 
-        perp = power0.reshape(n1)
-        para = power2.reshape(n2)
+        power_2d = np.zeros([np.size(para_k_bins)-1, np.size(perp_k_bins)-1])
 
-        # obtaining the corresponding wavenumbers
-        ks1 = np.fft.fftfreq(dims1, x.cell_size) * 2 * np.pi
-        kx, ky = np.meshgrid(ks1, ks1) # converting to a 2d array
-        k1 = (kx**2+ky**2)**0.5 # perp k-values
-        k1 = k1.reshape(np.size(k1)) # converting to 1d array for use in binned_statistic
-        kbins1 = np.geomspace(np.min(k1[np.nonzero(k1)]), np.max(k1), perp_bins) # sampling in log space - defining bin edges
-        kvals1 = ((kbins1[1:] + kbins1[:-1])) / 2
-        k2 = np.abs(np.fft.fftfreq(dims2, x.cell_size) * 2 * np.pi)
-        kbins2 = np.geomspace(np.min(k2[np.nonzero(k2)]), np.max(k2), par_bins) # sampling in log space - defining bin edges
-        kvals2 = ((kbins2[1:] + kbins2[:-1])) / 2
+        for i in range(len(perp_k_bins) - 1):
+            above_min = k_perp >= perp_k_bins[i]
+            below_max = k_perp < perp_k_bins[i+1]
+            check = (above_min & below_max).astype(int)
+            unbinned = np.sum(power_3d * check, axis=(0,1)) / (np.sum(check, axis=(0,1)))
+            binned, _, _ = stats.binned_statistic(ks2, unbinned, statistic="mean", bins=para_k_bins)
+            power_2d[:, i] += binned
 
-        Abins1, _, _ = stats.binned_statistic(k1, perp, statistic = "mean", bins = kbins1)
-        Abins2, _, _ = stats.binned_statistic(k2, para, statistic = "mean", bins = kbins2)
+        nan_check = np.sum(power_2d, axis=1)
+        power_2d = power_2d[~np.isnan(nan_check), :]
+        nan_check = np.append(nan_check, 1)
+        para_k_bins = para_k_bins[~np.isnan(nan_check)]
 
-        # removing values past the nyquist frequency 
-        new_k_1 = np.array([y for y in kvals1 if y <= (2*np.pi / (2*x.cell_size))])
-        new_k_2 = np.array([y for y in kvals2 if y <= (2*np.pi / (2*x.cell_size))])
-        plot1 = Abins1[0:(np.size(new_k_1))] 
-        plot2 = Abins2[0:(np.size(new_k_2))] 
-
-        # removing NaN values and adding a k=0 value for plotting
-        new_k_1 = new_k_1[~np.isnan(plot1)]
-        plot1 = plot1[~np.isnan(plot1)]
-        plot1 /= (np.max(new_k_1)**2 * np.pi * 4)
-        new_k_2 = new_k_2[~np.isnan(plot2)]
-        plot2 = plot2[~np.isnan(plot2)]
-        new_k_2 = new_k_2[:-1]
-        plot2 = plot2[:-1] # this truncation is just bc some weird sampling things were happening at the final wavenumber - think it was going inside the cell
-        plot2 /= (np.max(new_k_2) * 2 * np.pi)
-
-        cross = np.zeros((np.size(plot2), np.size(plot1))) # calculating the cross power spectrum
-        for i in range(np.size(plot1)):
-            for j in range(np.size(plot2)):
-                cross[j,i] = plot1[i]**0.5 * plot2[j]**0.5
-
-        cross /= (np.size(BT) * (x.HII_dim / x.box_len)**3)
-
-        cb = plt.pcolormesh(new_k_1, new_k_2, cross, cmap = "magma", norm="log")
+        cb1 = plt.pcolormesh(perp_k_bins, para_k_bins, power_2d, cmap="magma", norm='log')
+        cbar1 = plt.colorbar(cb1)
+        cbar1.set_label("P$_{cylin}$(k), (Mpc/h)$^3$ K$^2$")
+        plt.yscale("log")
+        plt.xscale("log")
         plt.xlabel("k$_{\perp}$, h/Mpc")
         plt.ylabel("k$_\|$, h/Mpc")
-        cbar = plt.colorbar(cb)
-        cbar.set_label("P$_{cylin}$(k), K$^2$(Mpc/h)$^3$)")
+        plt.tight_layout()
+        plt.title("z = "+ str(format(z, '.2f')))
+        plt.savefig("cylind_ps_" + str(redshift_bin) + "_z" + str(z) + ".png")
 
 
 def len_to_ang(len, z):

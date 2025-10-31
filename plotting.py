@@ -5,6 +5,9 @@ from matplotlib.ticker import StrMethodFormatter
 import numpy as np
 from hmf import MassFunction
 from postEoR.generation import hlittle, OMm
+plt.rcParams.update({'font.size': 15})
+plt.rcParams['figure.figsize'] = [9, 6]
+plt.style.use('seaborn-v0_8-ticks')
 
 
 def plot_lightcone(
@@ -166,7 +169,7 @@ def plot_mfs(counts,
 def plot_ps(ps, 
     k, 
     z : float, 
-    linestyle : str, 
+    marker : str, 
     ax, 
     label : str, 
     save_loc : str, 
@@ -198,7 +201,7 @@ def plot_ps(ps,
         The desired color of the plot.
     """
     plt.clf() # clearing any previous plots
-    ax.plot(k, ps, color=str(color), label="z = " + str(z) + ", " + str(label), linestyle=str(linestyle))
+    ax.scatter(k, ps, color=str(color), label="z = " + str(z) + ", " + str(label), marker=str(marker))
 
     ax.set_yscale("log")
     ax.set_xscale("log")

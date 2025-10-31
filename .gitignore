@@ -13,3 +13,9 @@ nbody_meshes/
 hkl/
 fast_bug_test.ipynb
 testing.ipynb
+*.pkl
+theoretical_tests.ipynb
+Notebooks/lightcones_vs_boxes.ipynb
+EoR_only/
+cone_analysis/
+.venv/
