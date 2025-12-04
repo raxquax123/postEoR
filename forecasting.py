@@ -40,7 +40,7 @@ def gen_ska_low_forecast(z, lin_bias=2.5, asurv=100, tsurv=5000, freq_bin=10e6, 
         Which analytic HI-halo relation to use. 1 corresponds to the simulation-based model from Spinelli et al. 2020, 2 is an observational-based model from Padmanabhan and Refegier (2017), and 3 is an observational-based model from Padamanabhan, Refregier, and Amara (2017). Defaults to 3.
 
     """
-    pars =  camb.set_params(H0=hlittle*100, ombh2=OMb*hlittle**2, omch2=(OMm - OMb)*hlittle**2, ns=1)
+    pars = camb.set_params(H0=hlittle*100, ombh2=OMb*hlittle**2, omch2=(OMm - OMb)*hlittle**2, ns=1)
     pars.set_matter_power(redshifts=[z], kmax=81)
 
     if fig is None or ax1 is None:

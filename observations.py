@@ -484,6 +484,27 @@ class SKA1LOW_AAstar(Telescope):
         self.stage = "AA*"
         Telescope.__init__(self)
 
+class SKA1LOW_AAstar_new(Telescope):
+    """
+    Instantiating the SKA-LOW telescope for the AA* stage with 50 stations removed from the core.
+
+    Parameters
+    ----------
+    T_spl : float
+        The spillover temperature of the instrument, in K.
+    """
+    def __init__(self, T_spl):
+        self.maxB = 73.4 # Maximum Baseline in km
+        self.ddish = 35. # diameter of a station, in m
+        self.nbeam = 1 # number of beams
+        self.npol = 2 # number of polarisations
+        self.ndish = 257. # number of stations
+        self.area = 419000 * self.ndish/512 # Total effective collecting area [m^2] CHECK
+        self.dnu = 781250.0 # this is coarse channel width - fine channel width is 226 Hz. In Hz
+        self.T_spl = T_spl
+        self.stage = "AA*_new"
+        Telescope.__init__(self)
+
 
 
 class SKA1LOW_AA4(Telescope):

@@ -507,8 +507,8 @@ def z_to_index(cone, bin_width):
     dist_bins = list([])
     for i in range(len(z_bins)):
         dist_bins.append(get_distance(z_bins[i]))
-
-    indices = np.round((np.asarray(dist_bins) - dist_bins[0]) / cone.cell_size, 0)
+    start_dist = get_distance(cone.z_end)
+    indices = np.abs(np.round((np.asarray(dist_bins) - start_dist) / cone.cell_size, 0))
 
     return indices
 

@@ -174,6 +174,7 @@ def generate_cone(
     random_seed=1122,
     nchunks=20,
     HI_model=3,
+    correction_factor=1,
 ) -> Ltcone: 
     """
     Generates a lightcone using the base functionality of 21cmFAST and post-processing functions in tools.py.
@@ -210,7 +211,9 @@ def generate_cone(
         The number of redshift bins to divide the lightcone into for calculating redshift-dependent values. Defaults to 20.
     HI_model : int (optional)
         Which analytic HI-halo relation to use. 1 corresponds to the simulation-based model from Spinelli et al. 2020, 2 is an observational-based model from Padmanabhan and Refegier (2017), and 3 is an observational-based model from Padamanabhan, Refregier, and Amara (2017). Defaults to 3.
-
+    correction_factor : float (optional)
+        The correction factor to apply to the halo-based HI distribution, in order to account for unresolved HI. Defaults to 1.
+        
     Returns
     -------
     ltcone : Ltcone object
@@ -322,7 +325,7 @@ def generate_cone(
                 if np.max(halos_ltcone[:,:,start:end]) == 0:
                     BT[:, :, start:end] = np.zeros(np.shape(dens_ltcone[:, :, start:end]))
                 else:
-                    HI_distr = tools.get_HI_field(halos_ltcone[:, :, start:end], redshift, box_len / HII_dim, max_rad=max_rad, HI_model=HI_model) # obtain the neutral hydrogen distribution, given a halo field and the redshift of evaluation
+                    HI_distr = tools.get_HI_field(halos_ltcone[:, :, start:end], redshift, box_len / HII_dim, max_rad=max_rad, HI_model=HI_model) * correction_factor # obtain the neutral hydrogen distribution, given a halo field and the redshift of evaluation
                     H_0 = hlittle * 100
                     H = H_0 * 1000 / Mpc_to_m * (OMm * (1+redshift)**3+OMl)**0.5
                     HI_dens = HI_distr * solar_mass / (box_len / HII_dim * Mpc_to_m)**3 # calculate \rho_{HI} in kg/m^3 h^2
