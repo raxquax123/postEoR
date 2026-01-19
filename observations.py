@@ -17,7 +17,7 @@ from astropy.time import Time
 import ska_ost_array_config.UVW as UVW
 from ska_ost_array_config.array_config import LowSubArray
 from ska_ost_array_config.UVW import plot_uv_coverage
-from scipy.interpolate import make_smoothing_spline
+from scipy.interpolate import make_smoothing_spline, make_interp_spline
 import matplotlib.pyplot as plt
 import os
 import hickle
@@ -246,7 +246,7 @@ def get_survey_volume(z_max, z_min, f_sky=0.0024):
 # total observation area of ska-low in z=3-6 band is approx 0.24% of sky - for ref, moon covers 0.00048%
 
 
-def avoid_fg(z, BT, survey, cell_size, use_horizon=True, grad=0.3, const=0.5):
+def avoid_fg(z, cone, survey, cell_size, use_horizon=True, grad=0.3, const=0.5):
     """
     Applies a foreground avoidance regime for calculating the observed power.
 
@@ -254,8 +254,8 @@ def avoid_fg(z, BT, survey, cell_size, use_horizon=True, grad=0.3, const=0.5):
     ----------
     z : float
         The mean redshift of the input field.
-    BT : NDarray
-        The brightness temperature field being observed.
+    cone : Ltcone object
+        The lightcone object containing the brightness temperature field and its associated information.
     survey : Survey object
         The survey being used to observe the field.
     cell_size : float
@@ -278,6 +278,8 @@ def avoid_fg(z, BT, survey, cell_size, use_horizon=True, grad=0.3, const=0.5):
     noisebins : NDarray
         The thermal noise power spectrum after foreground avoidance.
     """
+
+    BT = cone.BT_field
     power_3d = np.abs(np.fft.fftn(BT))**2 / (np.size(BT) * (1 / cell_size)**3)
 
     ks1 = np.abs(np.fft.fftfreq(np.shape(BT)[0], cell_size) * 2 * np.pi)
@@ -614,7 +616,6 @@ class Survey(ABC):
         self.asurv = self.asurv * (np.pi/180.)**2 # Survey area in sr
 
         self.npt = self.asurv / Tel.fov_at_z(self.z_med) # Number of pointings
-        self.t_single = (self.tsurv*3600.) / self.npt # Integration time per pointing
         
         self.T_sys = get_T_sys1(self.z_med, Tel.T_spl, self.T_atm) + T_CMB + get_T_rcv(self.z_med) # in K
         
@@ -771,6 +772,7 @@ class Interferometer(Survey):
         self.kperparr = self.kperp_at_z(self.z_med)
         self.Tel = Tel
         self.dfreq = freq_bin
+        self.t_single = (self.tsurv*3600.) / self.npt # * self.dfreq / (nu_21 / (1 + self.z_min) - nu_21 / (1 + self.z_max)) # Integration time per pointing
         
         # Set min and max k modes via the visibility coverage 
         kmin1 = self.kperparr[0]
