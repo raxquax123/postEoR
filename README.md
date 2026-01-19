@@ -8,7 +8,7 @@ postEoR is a semi-analytic simulation that builds on the outputs from 21cmFAST t
 * Calculation of foreground avoidance power spectra for given regime and survey
 
 # Install requirements
-* py21cmfast v3.4.0
+* py21cmfast commit b3f8e619d0d3fd53dff2b0ef1fe4d37d1adfc7eb
 	* In inputs.py, minimum node redshift needs to be changed from 5.5 to 2.99
 * scipy
 * numpy
