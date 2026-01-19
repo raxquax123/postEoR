@@ -1,5 +1,5 @@
 # postEoR
-postEoR is a semi-analytic simulation that builds on the outputs from 21cmFAST to simulate the neutral hydrogen field from $3 \lesssim z \lesssim 7$. This enables simulation of the transition from the end of reionization to late-time large-scale structure formation. 
+postEoR is a semi-analytic simulation that builds off of 21cmFAST to model the neutral hydrogen field from $3 \lesssim z \lesssim 7$. This enables simulation of the transition from the end of reionization to late-time large-scale structure formation. 
 
 # Features
 * Simple generation of lightcones and coeval boxes into a Ltcone or Box object, with all associated data saved in this object
