@@ -9,7 +9,7 @@ postEoR is a semi-analytic simulation that builds on the outputs from 21cmFAST t
 
 # Install requirements
 * py21cmfast commit b3f8e619d0d3fd53dff2b0ef1fe4d37d1adfc7eb
-	* In inputs.py, minimum node redshift needs to be changed from 5.5 to 2.99
+	* In inputs.py, min_redshift in _node_redshifts_default needs to be changed from 5.5 to 2.99 (to enable evolution of matter field past the end of the EoR)
 * scipy
 * numpy
 * skimage
