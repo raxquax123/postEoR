@@ -8,7 +8,7 @@ postEoR is a semi-analytic simulation that builds off of [21cmFAST](https://gith
 * Calculation of foreground avoidance power spectra for given regime and survey
 
 # Install requirements
-* py21cmfast commit b3f8e619d0d3fd53dff2b0ef1fe4d37d1adfc7eb
+* [py21cmfast](https://github.com/21cmfast/21cmFAST) commit b3f8e619d0d3fd53dff2b0ef1fe4d37d1adfc7eb
 	* In inputs.py, min_redshift in _node_redshifts_default needs to be changed from 5.5 to 2.99 (to enable evolution of matter field past the end of the EoR)
 * scipy
 * numpy
