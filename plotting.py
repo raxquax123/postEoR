@@ -151,7 +151,7 @@ def plot_mfs(counts,
     """
     plt.clf() # clearing any previous plots
     bins_plot = (bins[1:] + bins[:-1]) / 2
-    plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*box_len**2*los_dist)), histtype='step', label='z = ' + str(z), color=str(color))
+    plt.hist(bins_plot, bins, weights=(0.5 * counts / ((bins[1:]-bins[:-1]) * box_len**2 * los_dist) * (bins[1:]+bins[:-1])), histtype='step', label='z = ' + str(z), color=str(color))
     mf1 = MassFunction(z = z,
                   cosmo_params={"Om0":OMm}, 
                   hmf_model="Watson") 

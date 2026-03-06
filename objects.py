@@ -163,7 +163,7 @@ class Base(ABC):
                 plt.clf() # clearing any previous plots
             plt.rcParams['figure.figsize'] = [9, 6]
             bins_plot = (bins[1:] + bins[:-1]) / 2
-            plt.hist(bins_plot, bins, weights=(2 * counts / (np.log(bins[1:]+bins[:-1])*self.box_len**2*los_dist)), histtype='step', label='z = ' + str(self.z), color=str(color))
+            plt.hist(bins_plot, bins, weights=(0.5 * counts / ((bins[1:]-bins[:-1]) * self.box_len**2 * los_dist) * (bins[1:]+bins[:-1])), histtype='step', label='z = ' + str(self.z), color=str(color))
 
             plt.title(title)
             plt.yscale("log")
