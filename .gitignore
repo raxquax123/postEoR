@@ -7,3 +7,4 @@ testing.ipynb
 *.pkl
 cone_analysis/
 .venv/
+*.pdf
